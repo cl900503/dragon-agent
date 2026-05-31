@@ -229,17 +229,6 @@
   background: #ffffff !important;
 }
 
-/* --- Mermaid 容器 --- */
-.mermaid-wrapper {
-  margin: 10px 0;
-  padding: 16px;
-  background: #fff;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  text-align: center;
-  overflow-x: auto;
-}
-
 /* --- 响应式 --- */
 @media (max-width: 640px) {
   .message-row {

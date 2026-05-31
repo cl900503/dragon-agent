@@ -1,58 +1,27 @@
-import { useEffect, useState } from 'react'
+/**
+ * Markdown 语法测试面板——开发阶段验证 Markdown 渲染效果。
+ *
+ * 涵盖 GFM、LaTeX 公式、Mermaid 图表等所有渲染能力。
+ * 通过 React.lazy 按需加载，不影响主 bundle 体积。
+ *
+ * @author 陈龙
+ * @since 2026-05-31
+ */
+
 import ReactMarkdown from 'react-markdown'
+import type { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import rehypeRaw from 'rehype-raw'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
-import type { Components } from 'react-markdown'
-import mermaid from 'mermaid'
 import CodeBlock from './CodeBlock'
-
-/**
- * 测试面板专用的 Mermaid 图表渲染组件。
- * 与 MessageBubble 中的 MermaidBlock 功能相同，但使用独立的 ID 前缀避免冲突。
- */
-function MermaidBlock({ code }: { code: string }) {
-  const [svg, setSvg] = useState('')
-  const [renderError, setRenderError] = useState(false)
-
-  useEffect(() => {
-    let cancelled = false
-    mermaid
-      .render(
-        `mermaid-test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        code,
-      )
-      .then(({ svg: s }) => {
-        if (!cancelled) setSvg(s)
-      })
-      .catch(() => {
-        if (!cancelled) setRenderError(true)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [code])
-
-  if (renderError) {
-    return (
-      <div style={{ background: '#fff3cd', padding: 8, borderRadius: 4 }}>
-        <code>{code}</code>
-      </div>
-    )
-  }
-  return (
-    <div
-      className="mermaid-wrapper"
-      dangerouslySetInnerHTML={{ __html: svg }}
-    />
-  )
-}
+import MermaidBlock from './MermaidBlock'
+import './MarkdownTest.css'
 
 /**
  * 测试面板专用 rehype-sanitize 白名单。
- * 相比对话面板，额外允许 {@code <font>} 标签的 color/size/face 属性。
+ * 相比对话面板，额外允许 font 标签的 color、size、face 属性。
  */
 const testSchema = {
   ...defaultSchema,
@@ -69,13 +38,13 @@ const testSchema = {
   },
 }
 
-/** 测试面板 Markdown 自定义组件（与 MessageBubble 对齐） */
+/** 测试面板 Markdown 自定义渲染组件 */
 const mdComponents: Components = {
   code({ className, children, ...props }) {
     const match = /language-(\w+)/.exec(className || '')
     const code = String(children).replace(/\n$/, '')
     if (match) {
-      if (match[1] === 'mermaid') return <MermaidBlock code={code} />
+      if (match[1] === 'mermaid') return <MermaidBlock code={code} idPrefix="mermaid-test" />
       return <CodeBlock code={code} lang={match[1]} />
     }
     return (
@@ -331,37 +300,13 @@ classDiagram
 /**
  * Markdown 语法测试面板组件。
  *
- * 用于在开发阶段验证 Markdown 渲染效果，
- * 涵盖 GFM、LaTeX 公式、Mermaid 图表等所有渲染能力。
  * 通过 App 头部按钮切换显示。
- *
  * 此组件通过 React.lazy 按需加载，不影响主 bundle 体积。
- *
- * @author 陈龙
- * @since 2026-05-31
  */
 export default function MarkdownTest() {
   return (
-    <div
-      style={{
-        maxWidth: 900,
-        margin: '0 auto',
-        padding: 32,
-        background: '#fff',
-        border: '1px solid #d0d7de',
-        borderRadius: 8,
-      }}
-    >
-      <h1
-        style={{
-          fontSize: 24,
-          marginBottom: 16,
-          borderBottom: '1px solid #d0d7de',
-          paddingBottom: 8,
-        }}
-      >
-        Markdown 语法测试面板
-      </h1>
+    <div className="markdown-test-panel">
+      <h1>Markdown 语法测试面板</h1>
       <div className="markdown-body">
         <ReactMarkdown
           remarkPlugins={[remarkGfm, remarkMath]}

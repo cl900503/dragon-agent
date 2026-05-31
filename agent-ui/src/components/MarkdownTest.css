@@ -1,0 +1,15 @@
+.markdown-test-panel {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 32px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.markdown-test-panel h1 {
+  font-size: 24px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}

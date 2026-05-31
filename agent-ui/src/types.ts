@@ -19,7 +19,3 @@ export interface Message {
   thinking: boolean
 }
 
-/** POST /api/chat 和 /api/stream 的请求体 */
-export interface ChatRequest {
-  msg: string
-}

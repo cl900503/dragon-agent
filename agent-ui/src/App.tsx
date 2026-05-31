@@ -1,7 +1,7 @@
 /**
  * Dragon Agent 主应用组件。
  *
- * 管理对话状态、自动追底滚动、SSE 流式接收。
+ * 管理多会话状态、侧边栏交互、自动追底滚动、SSE 流式接收。
  *
  * @author 陈龙
  * @since 2026-05-31
@@ -10,10 +10,17 @@
 import { useState, useRef, useCallback, useLayoutEffect, useEffect, Suspense, lazy } from 'react'
 import ChatInput from './components/ChatInput'
 import MessageBubble from './components/MessageBubble'
-import { streamChat } from './api'
+import Sidebar from './components/Sidebar'
+import QuestionNav from './components/QuestionNav'
+import { streamChat, fetchConversations, fetchConversationMessages, deleteConversation } from './api'
 import type { Message } from './types'
+import type { ConversationSummary } from './api'
+import mermaid from 'mermaid'
 import './App.css'
 import 'katex/dist/katex.min.css'
+
+// Mermaid 全局初始化一次
+mermaid.initialize({ startOnLoad: false, theme: 'default' })
 
 // MarkdownTest 用 React.lazy 按需加载，不进入主 bundle
 const MarkdownTest = lazy(() => import('./components/MarkdownTest'))
@@ -30,11 +37,35 @@ export default function App() {
   const [streaming, setStreaming] = useState(false)
   const [testMode, setTestMode] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [activeConversationId, setActiveConversationId] = useState<string>(() => crypto.randomUUID())
+  const [conversations, setConversations] = useState<ConversationSummary[]>([])
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [qnavCollapsed, setQnavCollapsed] = useState(true)
+  const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null)
+  const [allMessages, setAllMessages] = useState<Record<string, Message[]>>({})
+
   const areaRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
 
   // 用户是否贴底。true = 自动追底，false = 用户上滚阅读历史中
   const pinnedRef = useRef(true)
+
+  // 用 ref 保持最新 conversationId，避免 handleSend 闭包过期
+  const conversationIdRef = useRef(activeConversationId)
+  useEffect(() => { conversationIdRef.current = activeConversationId }, [activeConversationId])
+
+  // 挂载时加载会话列表
+  useEffect(() => {
+    fetchConversations()
+      .then(setConversations)
+      .catch(() => {})
+  }, [])
+
+  const refreshConversations = useCallback(() => {
+    fetchConversations()
+      .then(setConversations)
+      .catch(() => {})
+  }, [])
 
   /**
    * 自动追底 —— 每次 messages 变化（新 token 到达），React 提交 DOM 后同步滚动。
@@ -97,9 +128,9 @@ export default function App() {
     setMessages(prev => [...prev, userMsg, aiMsg])
     setStreaming(true)
     setError(null)
-    pinnedRef.current = true // 新消息始终追底
+    pinnedRef.current = true
 
-    const controller = streamChat(msg, {
+    const controller = streamChat(msg, conversationIdRef.current, {
       onToken(text) {
         setMessages(prev => {
           const updated = [...prev]
@@ -136,6 +167,7 @@ export default function App() {
           }
           return updated
         })
+        refreshConversations()
       },
       onError(err) {
         setStreaming(false)
@@ -153,10 +185,83 @@ export default function App() {
           }
           return updated
         })
+        refreshConversations()
       },
     })
     abortRef.current = controller
-  }, [])
+  }, [refreshConversations])
+
+  /** 新建会话 */
+  const handleNewChat = useCallback(() => {
+    abortRef.current?.abort()
+    abortRef.current = null
+    if (messages.length > 0) {
+      setAllMessages(prev => ({ ...prev, [activeConversationId]: messages }))
+    }
+    setStreaming(false)
+    setMessages([])
+    setError(null)
+    const newId = crypto.randomUUID()
+    setActiveConversationId(newId)
+  }, [messages, activeConversationId])
+
+  /** 切换会话 */
+  const handleSelectConversation = useCallback(async (id: string) => {
+    if (id === activeConversationId) return
+
+    abortRef.current?.abort()
+    abortRef.current = null
+    setStreaming(false)
+    setError(null)
+
+    if (messages.length > 0) {
+      setAllMessages(prev => ({ ...prev, [activeConversationId]: messages }))
+    }
+
+    // 优先使用本地缓存
+    if (allMessages[id]) {
+      setMessages(allMessages[id])
+      setActiveConversationId(id)
+      return
+    }
+
+    try {
+      const data = await fetchConversationMessages(id)
+      const mapped: Message[] = data.messages.map(bm => ({
+        id: msgId(),
+        role: bm.messageType === 'USER' ? 'user' as const : 'assistant' as const,
+        content: bm.text,
+        reasoning: '',
+        thinking: false,
+      }))
+      setAllMessages(prev => ({ ...prev, [id]: mapped }))
+      setMessages(mapped)
+      setActiveConversationId(id)
+    } catch {
+      setError('加载对话失败')
+    }
+  }, [activeConversationId, messages, allMessages])
+
+  /** 删除会话 */
+  const handleDeleteConversation = useCallback(async (id: string) => {
+    try {
+      await deleteConversation(id)
+    } catch {
+      // API 失败也继续清理本地状态
+    }
+
+    setConversations(prev => prev.filter(c => c.id !== id))
+    setAllMessages(prev => {
+      const next = { ...prev }
+      delete next[id]
+      return next
+    })
+
+    if (id === activeConversationId) {
+      setMessages([])
+      setActiveConversationId(crypto.randomUUID())
+    }
+  }, [activeConversationId])
 
   /** 停止当前生成 */
   const handleStop = useCallback(() => {
@@ -173,56 +278,94 @@ export default function App() {
     })
   }, [])
 
+  /** 跳转到指定用户消息 */
+  const handleJumpTo = useCallback((messageId: string) => {
+    setActiveQuestionId(messageId)
+    const el = document.getElementById(`msg-${messageId}`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [])
+
+  // 当前会话中所有用户提问
+  const userQuestions = messages
+    .filter(m => m.role === 'user' && m.content.trim())
+    .map(m => ({ id: m.id, text: m.content }))
+
+  const showWelcome = !testMode && messages.length === 0
+
   return (
-    <div className="app">
-      <header className="header">
-        <span className="logo">🐉</span>
-        <div>
-          <h1>Dragon Agent</h1>
-        </div>
-        <button className="test-toggle" onClick={() => setTestMode(v => !v)}>
-          {testMode ? '← 返回对话' : '🧪 Markdown 测试'}
-        </button>
-      </header>
-
-      {error && (
-        <div className="error-banner">
-          <span>{error}</span>
-          <button onClick={() => setError(null)}>✕</button>
-        </div>
-      )}
-
-      {testMode ? (
-        <div className="chat-scroll">
-          <div className="chat-area" style={{ padding: 24 }}>
-            <Suspense fallback={<div style={{ textAlign: 'center', padding: 40, color: 'var(--text-secondary)' }}>加载中...</div>}>
-              <MarkdownTest />
-            </Suspense>
+    <div className="app-layout">
+      <Sidebar
+        conversations={conversations}
+        activeId={activeConversationId}
+        collapsed={sidebarCollapsed}
+        onSelect={handleSelectConversation}
+        onDelete={handleDeleteConversation}
+        onNewChat={handleNewChat}
+        onToggle={() => setSidebarCollapsed(v => !v)}
+      />
+      <div className="app">
+        <header className="header">
+          <span className="logo">🐉</span>
+          <div>
+            <h1>Dragon Agent</h1>
           </div>
-        </div>
-      ) : (
-        <>
-          <div className="chat-scroll" ref={areaRef}>
-            <div className="chat-area">
-              {messages.length === 0 && (
-                <div className="welcome">
-                  <div className="welcome-icon">🐉</div>
-                  <h2>Dragon Agent</h2>
-                  <p>由 DeepSeek 驱动的 AI 助手，输入消息开始对话</p>
-                </div>
-              )}
-              {messages.map((msg) => (
-                <MessageBubble
-                  key={msg.id}
-                  message={msg}
-                  isStreaming={streaming && msg.role === 'assistant' && msg === messages[messages.length - 1]}
-                />
-              ))}
+          {import.meta.env.DEV && (
+            <button className="test-toggle" onClick={() => setTestMode(v => !v)}>
+              {testMode ? '← 返回对话' : '🧪 Markdown 测试'}
+            </button>
+          )}
+        </header>
+
+        {error && (
+          <div className="error-banner">
+            <span>{error}</span>
+            <button onClick={() => setError(null)}>✕</button>
+          </div>
+        )}
+
+        {testMode ? (
+          <div className="chat-scroll">
+            <div className="chat-area" style={{ padding: 24 }}>
+              <Suspense fallback={<div style={{ textAlign: 'center', padding: 40, color: 'var(--text-secondary)' }}>加载中...</div>}>
+                <MarkdownTest />
+              </Suspense>
             </div>
           </div>
-          <ChatInput streaming={streaming} onSend={handleSend} onStop={handleStop} />
-        </>
-      )}
+        ) : showWelcome ? (
+          <div className="welcome-layout">
+            <div className="welcome">
+              <div className="welcome-icon">🐉</div>
+              <h2>Dragon Agent</h2>
+              <p>由 DeepSeek 驱动的 AI 助手，输入消息开始对话</p>
+            </div>
+            <ChatInput streaming={streaming} onSend={handleSend} onStop={handleStop} />
+          </div>
+        ) : (
+          <>
+            <div className="chat-scroll" ref={areaRef}>
+              <div className="chat-area">
+                {messages.map((msg) => (
+                  <MessageBubble
+                    key={msg.id}
+                    message={msg}
+                    isStreaming={streaming && msg.role === 'assistant' && msg === messages[messages.length - 1]}
+                  />
+                ))}
+              </div>
+            </div>
+            <ChatInput streaming={streaming} onSend={handleSend} onStop={handleStop} />
+          </>
+        )}
+      </div>
+      <QuestionNav
+        questions={userQuestions}
+        collapsed={qnavCollapsed}
+        activeId={activeQuestionId ?? undefined}
+        onToggle={() => setQnavCollapsed(v => !v)}
+        onJumpTo={handleJumpTo}
+      />
     </div>
   )
 }

@@ -9,12 +9,10 @@ spring:
   application:
     name: agent
 
-  # 从外部文件加载保密配置（API Key 等）
   config:
     import:
       - optional:classpath:config/ai.properties
 
-  # Spring AI DeepSeek 原生配置
   ai:
     deepseek:
       api-key: ${AI_API_KEY}
@@ -22,3 +20,13 @@ spring:
       chat:
         options:
           model: ${AI_MODEL}
+
+# Actuator 健康检查——仅暴露 health 端点
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never

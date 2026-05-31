@@ -9,9 +9,10 @@ import org.springframework.web.cors.reactive.CorsWebFilter;
 import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 
 /**
- * 全局 CORS 配置（WebFlux 版本，用 CorsWebFilter 而非传统 Filter）。
+ * 全局 CORS 配置——WebFlux 环境使用 CorsWebFilter。
  *
- * 仅允许 Vite 开发服务器跨域访问。生产环境应改为实际域名。
+ * 仅允许 Vite 开发服务器跨域访问。
+ * 生产环境部署时应将 allowedOrigins 改为实际前端域名。
  *
  * @author 陈龙
  * @since 2026-05-31
@@ -23,8 +24,13 @@ public class CorsConfig {
     public CorsWebFilter corsWebFilter() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(List.of("http://localhost:5173"));
-        config.setAllowedMethods(List.of("GET", "POST", "OPTIONS"));
-        config.setAllowedHeaders(List.of("*"));
+        config.setAllowedMethods(List.of("GET", "POST", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of(
+                "Content-Type",
+                "Accept",
+                "X-Conversation-Id"));
+        config.setExposedHeaders(List.of("X-Conversation-Id"));
+        config.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);

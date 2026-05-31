@@ -1,5 +1,13 @@
-.app {
+/* ---- 整体布局：侧边栏 + 主区域 ---- */
+.app-layout {
+  display: flex;
   height: 100vh;
+  overflow: hidden;
+}
+
+.app-layout > .app {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   background: var(--bg);
@@ -85,8 +93,25 @@
   gap: 4px;
 }
 
-/* --- 欢迎页 --- */
-.welcome { text-align: center; margin: auto; color: var(--text-secondary); }
+/* --- 欢迎页（无消息时，整体居中） --- */
+.welcome-layout {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 32px;
+}
+
+.welcome-layout .welcome {
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.welcome-layout .input-area {
+  max-width: var(--chat-max-width);
+  width: 100%;
+  margin: 0 auto;
+}
 
 .welcome-icon { font-size: 48px; margin-bottom: 12px; }
 

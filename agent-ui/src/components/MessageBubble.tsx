@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useDeferredValue } from 'react'
+import { useState, useCallback, useDeferredValue } from 'react'
 import ReactMarkdown from 'react-markdown'
 import type { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -6,13 +6,10 @@ import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import rehypeRaw from 'rehype-raw'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
-import mermaid from 'mermaid'
 import CodeBlock from './CodeBlock'
+import MermaidBlock from './MermaidBlock'
 import type { Message } from '../types'
 import './MessageBubble.css'
-
-// 模块加载时初始化 mermaid，全局生效一次即可
-mermaid.initialize({ startOnLoad: false, theme: 'default' })
 
 interface Props {
   message: Message
@@ -30,48 +27,7 @@ const safeSchema = {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const rehypePlugins: any = [rehypeKatex, rehypeRaw, [rehypeSanitize, safeSchema]]
-
-/**
- * Mermaid 图表组件。
- * 异步调用 mermaid.render() 将 DSL 转为 SVG，用 cancelled 标记防止竞态。
- * 渲染失败时回退显示原始代码。
- */
-function MermaidBlock({ code }: { code: string }) {
-  const [svg, setSvg] = useState('')
-  const [renderError, setRenderError] = useState(false)
-
-  useEffect(() => {
-    let cancelled = false
-    mermaid
-      .render(
-        `mermaid-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        code,
-      )
-      .then(({ svg: s }) => {
-        if (!cancelled) setSvg(s)
-      })
-      .catch(() => {
-        if (!cancelled) setRenderError(true)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [code])
-
-  if (renderError) {
-    return (
-      <div className="code-block-wrapper">
-        <div className="code-block-header"><span>mermaid</span></div>
-        <pre><code>{code}</code></pre>
-      </div>
-    )
-  }
-
-  return (
-    <div className="mermaid-wrapper" dangerouslySetInnerHTML={{ __html: svg }} />
-  )
-}
+const rehypePlugins: any[] = [rehypeKatex, rehypeRaw, [rehypeSanitize, safeSchema]]
 
 // react-markdown 自定义渲染：代码块按语言分发，链接统一加 target="_blank"
 const mdComponents: Components = {
@@ -118,7 +74,7 @@ export default function MessageBubble({ message, isStreaming = false }: Props) {
   const hasReasoning = !!(message.reasoning || message.thinking)
 
   return (
-    <div className={`message-row ${message.role}`}>
+    <div className={`message-row ${message.role}`} id={`msg-${message.id}`}>
       <div className="avatar">
         {message.role === 'user' ? '👤' : '🐉'}
       </div>
