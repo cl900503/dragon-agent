@@ -1,3 +1,24 @@
+# ============================================================
+# Dragon Agent 应用配置
+# ============================================================
+
+server:
+  port: 8080
+
 spring:
   application:
     name: agent
+
+  # 从外部文件加载保密配置（API Key 等）
+  config:
+    import:
+      - optional:classpath:config/ai.properties
+
+  # Spring AI DeepSeek 原生配置
+  ai:
+    deepseek:
+      api-key: ${AI_API_KEY}
+      base-url: ${AI_BASE_URL}
+      chat:
+        options:
+          model: ${AI_MODEL}

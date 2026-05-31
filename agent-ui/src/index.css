@@ -1,0 +1,35 @@
+@import 'github-markdown-css/github-markdown-light.css';
+
+:root {
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --primary: #4f46e5;
+  --primary-hover: #4338ca;
+  --text: #1a1a2e;
+  --text-secondary: #656d76;
+  --border: #d0d7de;
+  --subtle-bg: #f6f8fa;
+  --user-bubble-bg: #e0e7ff;
+  --user-bubble-text: #3730a3;
+  --chat-max-width: 960px;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 15px;
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  overflow: hidden;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  height: 100vh;
+}

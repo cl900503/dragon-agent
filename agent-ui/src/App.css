@@ -1,0 +1,102 @@
+.app {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+/* --- 顶部栏 --- */
+.header {
+  background: var(--surface);
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.header .logo { font-size: 22px; line-height: 1; }
+
+.header h1 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.test-toggle {
+  margin-left: auto;
+  padding: 5px 12px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+.test-toggle:hover {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+/* --- 错误横幅 --- */
+.error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: #fff3cd;
+  color: #856404;
+  font-size: 13px;
+  border-bottom: 1px solid #ffc107;
+  flex-shrink: 0;
+}
+
+.error-banner button {
+  background: none;
+  border: none;
+  font-size: 16px;
+  color: #856404;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+/* --- 对话滚动容器 --- */
+.chat-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-anchor: none;
+  scroll-behavior: smooth;
+  width: 100%;
+}
+
+/* --- 对话区域（居中） --- */
+.chat-area {
+  max-width: var(--chat-max-width);
+  width: 100%;
+  margin: 0 auto;
+  padding: 20px 16px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* --- 欢迎页 --- */
+.welcome { text-align: center; margin: auto; color: var(--text-secondary); }
+
+.welcome-icon { font-size: 48px; margin-bottom: 12px; }
+
+.welcome h2 { font-size: 20px; color: var(--text); margin-bottom: 6px; font-weight: 600; }
+
+.welcome p { font-size: 15px; margin: 0; }
+
+/* --- 响应式 --- */
+@media (max-width: 640px) {
+  .chat-area {
+    padding: 12px 12px 4px;
+  }
+}

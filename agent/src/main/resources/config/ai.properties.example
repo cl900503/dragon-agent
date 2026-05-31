@@ -1,0 +1,3 @@
+AI_API_KEY=sk-your-deepseek-api-key
+AI_BASE_URL=https://api.deepseek.com
+AI_MODEL=deepseek-chat
