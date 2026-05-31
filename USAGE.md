@@ -204,13 +204,15 @@ dragon-agent/
 │       │   ├── controller/
 │       │   │   ├── ChatController.java     # 同步对话接口
 │       │   │   ├── StreamController.java   # SSE 流式接口
-│       │   │   ├── ConversationController.java  # 会话管理接口
-│       │   │   └── GlobalExceptionHandler.java  # 全局异常处理
-│       │   ├── model/
+│       │   │   └── ConversationController.java  # 会话管理接口
+│       │   ├── dto/
 │       │   │   ├── ChatRequest.java        # 请求 DTO（含校验）
 │       │   │   └── ErrorResponse.java      # 错误响应体
+│       │   ├── exception/
+│       │   │   └── GlobalExceptionHandler.java  # 全局异常处理
 │       │   └── service/
-│       │       └── AiService.java          # AI 对话服务（封装 ChatClient + ChatMemory）
+│       │       ├── AiService.java          # AI 对话服务（封装 ChatClient）
+│       │       └── ConversationService.java  # 会话管理服务（ChatMemory 操作）
 │       └── resources/
 │           ├── application.yaml
 │           └── config/
@@ -243,16 +245,18 @@ dragon-agent/
 ### 后端分层
 
 ```
-Controller（接收请求、参数校验、调用 Service）
-  → Service（业务逻辑、AI 调用、模型适配）
+Controller（接收请求、参数校验）
+  → AiService（AI 对话、模型适配）
+  → ConversationService（会话管理、ID 解析）
     → Spring AI ChatClient（标准 API）
       → MessageChatMemoryAdvisor（自动管理对话记忆）
         → ChatMemory（内存存储，可替换为持久化实现）
 ```
 
 - Controller 层不依赖任何模型特有类，所有模型适配逻辑封装在 AiService
-- conversationId 解析逻辑的唯一来源是 AiService.resolveConversationId()
-- 推理内容提取使用私有方法 extractReasoningContent()，对 Controller 透明
+- conversationId 解析逻辑的唯一来源是 ConversationService.resolveConversationId()
+- 推理内容提取使用 AiService 私有方法 extractReasoningContent()，对 Controller 透明
+- 会话生命周期（列表、详情、清除）由 ConversationService 统一管理
 
 ### 前端组件树
 
