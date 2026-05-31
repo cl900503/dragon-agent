@@ -11,12 +11,12 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.dragon.agent.service.AiService;
+import com.dragon.agent.service.ConversationService;
 
 /**
  * 会话管理接口——列表、详情查询和清除会话历史。
  *
- * 所有操作通过 AiService 委托给 Spring AI ChatMemory，
+ * 所有操作通过 ConversationService 委托给 Spring AI ChatMemory，
  * 不直接操作底层存储。
  *
  * @author 陈龙
@@ -26,10 +26,10 @@ import com.dragon.agent.service.AiService;
 @RequestMapping("/api/conversations")
 public class ConversationController {
 
-    private final AiService aiService;
+    private final ConversationService conversationService;
 
-    public ConversationController(AiService aiService) {
-        this.aiService = aiService;
+    public ConversationController(ConversationService conversationService) {
+        this.conversationService = conversationService;
     }
 
     /**
@@ -44,7 +44,7 @@ public class ConversationController {
      */
     @GetMapping
     public ResponseEntity<List<Map<String, String>>> listConversations() {
-        return ResponseEntity.ok(aiService.listConversations());
+        return ResponseEntity.ok(conversationService.listConversations());
     }
 
     /**
@@ -64,7 +64,7 @@ public class ConversationController {
      */
     @GetMapping("/{id}")
     public ResponseEntity<Map<String, Object>> getConversation(@PathVariable String id) {
-        var messages = aiService.getMessages(id);
+        var messages = conversationService.getMessages(id);
         return ResponseEntity.ok(Map.of(
                 "conversationId", id,
                 "messages", messages,
@@ -84,7 +84,7 @@ public class ConversationController {
      */
     @DeleteMapping("/{id}")
     public ResponseEntity<Map<String, Object>> clearConversation(@PathVariable String id) {
-        aiService.clearConversation(id);
+        conversationService.clearConversation(id);
         return ResponseEntity.ok(Map.of(
                 "conversationId", id,
                 "cleared", true,

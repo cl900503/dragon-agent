@@ -1,4 +1,4 @@
-package com.dragon.agent.model;
+package com.dragon.agent.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;

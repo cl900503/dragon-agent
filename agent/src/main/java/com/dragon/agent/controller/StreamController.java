@@ -7,8 +7,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.dragon.agent.model.ChatRequest;
+import com.dragon.agent.dto.ChatRequest;
 import com.dragon.agent.service.AiService;
+import com.dragon.agent.service.ConversationService;
 
 import jakarta.validation.Valid;
 import reactor.core.publisher.Flux;
@@ -36,9 +37,11 @@ import reactor.core.publisher.Flux;
 public class StreamController {
 
     private final AiService aiService;
+    private final ConversationService conversationService;
 
-    public StreamController(AiService aiService) {
+    public StreamController(AiService aiService, ConversationService conversationService) {
         this.aiService = aiService;
+        this.conversationService = conversationService;
     }
 
     /**
@@ -56,7 +59,7 @@ public class StreamController {
      */
     @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<String>> stream(@Valid @RequestBody ChatRequest request) {
-        String cid = aiService.resolveConversationId(request.conversationId());
+        String cid = conversationService.resolveConversationId(request.conversationId());
         return aiService.stream(request.message(), cid);
     }
 }

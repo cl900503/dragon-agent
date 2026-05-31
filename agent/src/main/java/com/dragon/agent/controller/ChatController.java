@@ -6,8 +6,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.dragon.agent.model.ChatRequest;
+import com.dragon.agent.dto.ChatRequest;
 import com.dragon.agent.service.AiService;
+import com.dragon.agent.service.ConversationService;
 
 import jakarta.validation.Valid;
 import reactor.core.publisher.Mono;
@@ -19,7 +20,7 @@ import reactor.core.scheduler.Schedulers;
  * 多轮对话通过 conversationId 关联上下文，
  * 响应头 X-Conversation-Id 返回实际使用的会话 ID，前端应保存此值。
  *
- * 对话 ID 解析完全委托给 AiService，Controller 不参与 ID 生成逻辑。
+ * 会话管理委托给 ConversationService，AI 调用委托给 AiService。
  *
  * @author 陈龙
  * @since 2026-05-31
@@ -29,9 +30,11 @@ import reactor.core.scheduler.Schedulers;
 public class ChatController {
 
     private final AiService aiService;
+    private final ConversationService conversationService;
 
-    public ChatController(AiService aiService) {
+    public ChatController(AiService aiService, ConversationService conversationService) {
         this.aiService = aiService;
+        this.conversationService = conversationService;
     }
 
     /**
@@ -48,7 +51,7 @@ public class ChatController {
      */
     @PostMapping("/chat")
     public Mono<ResponseEntity<String>> chat(@Valid @RequestBody ChatRequest request) {
-        String cid = aiService.resolveConversationId(request.conversationId());
+        String cid = conversationService.resolveConversationId(request.conversationId());
         return Mono.fromCallable(() -> aiService.chat(request.message(), cid))
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(content -> ResponseEntity.ok()

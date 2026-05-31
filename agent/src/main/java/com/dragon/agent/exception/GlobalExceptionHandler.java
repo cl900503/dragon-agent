@@ -1,4 +1,4 @@
-package com.dragon.agent.controller;
+package com.dragon.agent.exception;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.bind.support.WebExchangeBindException;
 
-import com.dragon.agent.model.ErrorResponse;
+import com.dragon.agent.dto.ErrorResponse;
 
 /**
  * 全局异常处理——统一所有接口的错误响应格式，避免堆栈信息泄漏到前端。
