@@ -63,7 +63,7 @@ export function streamChat(
   fetch('/api/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ msg, conversationId }),
+    body: JSON.stringify({ message: msg, conversationId }),
     signal: controller.signal,
   })
     .then(async (response) => {
