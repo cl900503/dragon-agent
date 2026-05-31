@@ -53,11 +53,15 @@ dragon-agent/
 │       ├── controller/
 │       │   ├── ChatController.java           # POST /api/chat
 │       │   ├── StreamController.java         # POST /api/stream (SSE)
-│       │   └── GlobalExceptionHandler.java
-│       ├── model/
+│       │   └── ConversationController.java   # 会话管理接口
+│       ├── dto/
 │       │   ├── ChatRequest.java
 │       │   └── ErrorResponse.java
-│       └── service/AiService.java
+│       ├── exception/
+│       │   └── GlobalExceptionHandler.java
+│       └── service/
+│           ├── AiService.java                # AI 对话服务
+│           └── ConversationService.java      # 会话管理服务
 ├── agent-ui/                       # 前端 React
 │   └── src/
 │       ├── App.tsx                 # 主应用
@@ -67,7 +71,10 @@ dragon-agent/
 │           ├── ChatInput.tsx       # 输入框
 │           ├── MessageBubble.tsx   # 消息气泡（Markdown + Mermaid）
 │           ├── CodeBlock.tsx       # 代码块（高亮 + 复制）
-│           └── MarkdownTest.tsx    # Markdown 测试面板
+│           ├── MermaidBlock.tsx    # Mermaid 图表渲染
+│           ├── Sidebar.tsx         # 左侧会话列表
+│           ├── QuestionNav.tsx     # 右侧问题导航
+│           └── MarkdownTest.tsx    # Markdown 测试面板（仅 DEV 模式）
 ├── USAGE.md                        # 详细使用文档
 └── LICENSE                         # Apache 2.0
 ```
