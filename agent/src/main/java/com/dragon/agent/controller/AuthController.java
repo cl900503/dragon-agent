@@ -16,10 +16,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ServerWebExchange;
 
+import com.dragon.agent.config.AuthTokenWebFilter;
 import com.dragon.agent.dto.AuthResponse;
 import com.dragon.agent.dto.LoginRequest;
 import com.dragon.agent.dto.RegisterRequest;
 import com.dragon.agent.exception.UsernameAlreadyExistsException;
+import com.dragon.agent.service.TokenService;
 import com.dragon.agent.service.UserService;
 
 import jakarta.validation.Valid;
@@ -40,13 +42,16 @@ import reactor.core.scheduler.Schedulers;
 public class AuthController {
 
     private final UserService userService;
+    private final TokenService tokenService;
     private final ReactiveAuthenticationManager authManager;
     private final ServerSecurityContextRepository securityContextRepository;
 
     public AuthController(UserService userService,
+                          TokenService tokenService,
                           ReactiveAuthenticationManager authManager,
                           ServerSecurityContextRepository securityContextRepository) {
         this.userService = userService;
+        this.tokenService = tokenService;
         this.authManager = authManager;
         this.securityContextRepository = securityContextRepository;
     }
@@ -61,9 +66,13 @@ public class AuthController {
         return Mono.fromCallable(() ->
                         userService.register(request.username(), request.password()))
                 .subscribeOn(Schedulers.boundedElastic())
-                .flatMap(userDetails -> saveSecurityContext(userDetails, exchange)
-                        .thenReturn(ResponseEntity.status(201)
-                                .body(new AuthResponse(request.username(), "注册成功"))))
+                .flatMap(userDetails -> {
+                    String token = tokenService.generateToken(request.username());
+                    exchange.getResponse().addCookie(AuthTokenWebFilter.createTokenCookie(token));
+                    return saveSecurityContext(userDetails, exchange)
+                            .thenReturn(ResponseEntity.status(201)
+                                    .body(new AuthResponse(request.username(), "注册成功")));
+                })
                 .onErrorResume(UsernameAlreadyExistsException.class, e ->
                         Mono.just(ResponseEntity.status(409)
                                 .body(new AuthResponse(null, e.getMessage()))));
@@ -81,6 +90,8 @@ public class AuthController {
         return authManager.authenticate(token)
                 .flatMap(auth -> {
                     UserDetails user = (UserDetails) auth.getPrincipal();
+                    String authToken = tokenService.generateToken(user.getUsername());
+                    exchange.getResponse().addCookie(AuthTokenWebFilter.createTokenCookie(authToken));
                     return saveSecurityContext(user, exchange)
                             .thenReturn(ResponseEntity.ok(
                                     new AuthResponse(user.getUsername(), "登录成功")));
@@ -96,6 +107,7 @@ public class AuthController {
     @PostMapping("/logout")
     public Mono<ResponseEntity<Void>> logout(ServerWebExchange exchange) {
         SecurityContext emptyContext = new SecurityContextImpl();
+        exchange.getResponse().addCookie(AuthTokenWebFilter.clearTokenCookie());
         return securityContextRepository.save(exchange, emptyContext)
                 .then(Mono.just(ResponseEntity.ok().build()));
     }

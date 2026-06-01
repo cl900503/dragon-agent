@@ -40,10 +40,12 @@ public class SecurityConfig {
     public SecurityWebFilterChain securityWebFilterChain(
             ServerHttpSecurity http,
             CustomReactiveAuthenticationManager authManager,
-            WebSessionServerSecurityContextRepository securityContextRepository) {
+            WebSessionServerSecurityContextRepository securityContextRepository,
+            AuthTokenWebFilter authTokenWebFilter) {
 
         return http
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
+                .addFilterAt(authTokenWebFilter, org.springframework.security.config.web.server.SecurityWebFiltersOrder.AUTHENTICATION)
                 .authorizeExchange(auth -> auth
                         .pathMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                         .pathMatchers(HttpMethod.POST, "/api/auth/register").permitAll()

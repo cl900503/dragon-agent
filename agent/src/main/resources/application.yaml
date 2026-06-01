@@ -30,6 +30,8 @@ spring:
 app:
   cors:
     allowed-origins: ${CORS_ORIGINS:http://localhost:5173}
+  auth:
+    token-secret: ${AUTH_TOKEN_SECRET:dragon-agent-default-secret-change-in-production}
 
 # Actuator 健康检查——仅暴露 health 端点
 management:
