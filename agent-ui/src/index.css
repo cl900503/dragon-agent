@@ -12,6 +12,10 @@
   --user-bubble-bg: #e0e7ff;
   --user-bubble-text: #3730a3;
   --chat-max-width: 960px;
+  --error-bg: #fef2f2;
+  --error-border: #fecaca;
+  --error-text: #991b1b;
+  --error-icon: #ef4444;
 }
 
 *, *::before, *::after {

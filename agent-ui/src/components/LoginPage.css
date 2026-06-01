@@ -12,6 +12,7 @@
   background: var(--surface);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 4px 16px rgba(0, 0, 0, 0.04);
   text-align: center;
+  overflow: hidden;
 }
 
 .login-logo {
@@ -20,28 +21,73 @@
 }
 
 .login-card h1 {
-  margin: 0 0 24px;
+  margin: 0 0 20px;
   font-size: 20px;
   font-weight: 600;
   color: var(--text);
 }
 
+/* ---- 顶部错误横幅（始终渲染，切换可见性，避免卡片缩放） ---- */
+.login-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: -40px -32px 24px;
+  padding: 12px 32px;
+  font-size: 13px;
+  line-height: 1.4;
+  background: transparent;
+  color: transparent;
+  transition: background 0.25s, color 0.25s;
+  user-select: none;
+}
+
+.login-error-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+
+.login-error--active {
+  background: var(--error-bg);
+  color: var(--error-text);
+}
+
+.login-error--active .login-error-icon {
+  opacity: 1;
+}
+
+@keyframes errorIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ---- 表单 ---- */
 .login-card form {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 6px;
 }
 
+.login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* ---- 输入框 ---- */
 .login-card input {
   width: 100%;
-  padding: 10px 14px;
+  padding: 11px 16px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 12px;
   font-size: 15px;
   color: var(--text);
   background: var(--bg);
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color 0.2s, box-shadow 0.2s;
   box-sizing: border-box;
 }
 
@@ -50,12 +96,39 @@
   box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
 }
 
+.login-card input.input-error {
+  border-color: var(--error-icon);
+}
+
+.login-card input.input-error:focus {
+  border-color: var(--error-icon);
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+}
+
+/* ---- 字段校验提示（固定预留一行空间） ---- */
+.field-hint {
+  min-height: 22px;
+  padding: 2px 4px 0;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: left;
+  color: transparent;
+  transition: color 0.2s;
+  user-select: none;
+}
+
+.field-hint--error {
+  color: var(--error-text);
+}
+
+/* ---- 提交按钮 ---- */
 .login-card button[type="submit"] {
-  padding: 10px 0;
+  margin-top: 10px;
+  padding: 11px 0;
   background: var(--primary);
   color: #fff;
   border: none;
-  border-radius: 8px;
+  border-radius: 12px;
   font-size: 15px;
   font-weight: 500;
   cursor: pointer;
@@ -71,16 +144,7 @@
   cursor: not-allowed;
 }
 
-.login-error {
-  padding: 8px 12px;
-  background: #fff3cd;
-  border: 1px solid #ffc107;
-  border-radius: 6px;
-  color: #856404;
-  font-size: 13px;
-  text-align: left;
-}
-
+/* ---- 底部切换 ---- */
 .login-switch {
   margin-top: 16px;
   font-size: 14px;
