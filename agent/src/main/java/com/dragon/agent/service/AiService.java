@@ -4,6 +4,7 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.model.Generation;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
 
@@ -77,7 +78,7 @@ public class AiService {
                 .chatResponse()
                 .flatMap(response -> {
                     Flux<ServerSentEvent<String>> events = Flux.empty();
-                    for (var gen : response.getResults()) {
+                    for (Generation gen : response.getResults()) {
                         AssistantMessage output = gen.getOutput();
 
                         String reasoning = extractReasoningContent(output);

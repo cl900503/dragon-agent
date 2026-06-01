@@ -1,5 +1,5 @@
 # ============================================================
-# Dragon Agent 应用配置
+# Dragon Agent 应用基础配置（所有 Profile 共享）
 # ============================================================
 
 server:
@@ -20,6 +20,16 @@ spring:
       chat:
         options:
           model: ${AI_MODEL}
+    chat:
+      memory:
+        repository:
+          jdbc:
+            initialize-schema: always
+
+# CORS 允许的前端域名，逗号分隔，支持环境变量覆盖
+app:
+  cors:
+    allowed-origins: ${CORS_ORIGINS:http://localhost:5173}
 
 # Actuator 健康检查——仅暴露 health 端点
 management:
@@ -30,3 +40,12 @@ management:
   endpoint:
     health:
       show-details: never
+
+# 全局日志格式和默认级别
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  level:
+    com.dragon: DEBUG
+    org.springframework.security: WARN
+    org.springframework.ai: DEBUG

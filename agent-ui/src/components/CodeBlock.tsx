@@ -7,6 +7,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { codeToHtml } from 'shiki'
+import './CodeBlock.css'
 
 interface Props {
   code: string
@@ -82,7 +83,9 @@ export default function CodeBlock({ code, lang }: Props) {
       {html ? (
         <div className="shiki-wrapper" dangerouslySetInnerHTML={{ __html: html }} />
       ) : (
-        <pre><code>{code}</code></pre>
+        <div className="shiki-wrapper">
+          <pre><code>{code}</code></pre>
+        </div>
       )}
     </div>
   )

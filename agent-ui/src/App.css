@@ -78,7 +78,6 @@
   flex: 1;
   overflow-y: auto;
   overflow-anchor: none;
-  scroll-behavior: smooth;
   width: 100%;
 }
 
@@ -118,6 +117,16 @@
 .welcome h2 { font-size: 20px; color: var(--text); margin-bottom: 6px; font-weight: 600; }
 
 .welcome p { font-size: 15px; margin: 0; }
+
+/* --- test 模式覆盖 --- */
+.chat-area--test { padding: 24px; }
+
+/* --- 加载 / 暂挂状态 --- */
+.app-loading { display: flex; align-items: center; justify-content: center; }
+
+.loading-text { color: var(--text-secondary); }
+
+.suspense-fallback { text-align: center; padding: 40px; color: var(--text-secondary); }
 
 /* --- 响应式 --- */
 @media (max-width: 640px) {

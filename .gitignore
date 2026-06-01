@@ -1,0 +1,21 @@
+# === IDE ===
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+.classpath
+.project
+.settings/
+
+# === OS ===
+.DS_Store
+Thumbs.db
+
+# === Secrets ===
+*.properties
+!**/src/main/resources/config/ai.properties
+
+# === Environment ===
+.env
+.env.*

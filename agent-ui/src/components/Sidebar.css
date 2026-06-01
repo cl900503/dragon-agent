@@ -168,3 +168,52 @@
   color: #d1242f;
   background: #ffeef0;
 }
+
+/* ---- 底部用户信息 + 退出 ---- */
+.sidebar-footer {
+  border-top: 1px solid var(--border);
+  padding: 10px 14px;
+}
+
+.sidebar-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.user-avatar {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.user-name {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logout-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.logout-btn:hover {
+  border-color: #d1242f;
+  color: #d1242f;
+  background: #ffeef0;
+}

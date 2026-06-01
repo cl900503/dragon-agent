@@ -1,0 +1,35 @@
+# ============================================================
+# Dragon Agent 生产环境配置模板
+# 激活方式: spring.profiles.active=prod
+# 所有敏感值必须通过环境变量注入，严禁硬编码
+# ============================================================
+
+server:
+  port: ${PORT:8080}
+
+spring:
+  # MySQL 数据源——生产环境通过环境变量注入
+  datasource:
+    url: ${MYSQL_URL}
+    username: ${MYSQL_USER}
+    password: ${MYSQL_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  # JPA——生产环境禁止自动建表，使用 Flyway/Liquibase 管理 schema
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    open-in-view: false
+
+  # WebFlux Session 超时
+  webflux:
+    session:
+      timeout: 1h
+
+# 生产日志级别
+logging:
+  level:
+    com.dragon: INFO
+    org.springframework.security: WARN
+    org.springframework.ai: INFO

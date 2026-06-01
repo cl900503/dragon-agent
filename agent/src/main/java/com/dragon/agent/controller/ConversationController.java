@@ -12,12 +12,16 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.dragon.agent.service.ConversationService;
+import com.dragon.agent.support.SecurityHelper;
+
+import org.springframework.ai.chat.messages.Message;
+
+import reactor.core.publisher.Mono;
 
 /**
  * 会话管理接口——列表、详情查询和清除会话历史。
  *
- * 所有操作通过 ConversationService 委托给 Spring AI ChatMemory，
- * 不直接操作底层存储。
+ * 所有操作按当前登录用户隔离，非属主会话返回 403。
  *
  * @author 陈龙
  * @since 2026-05-31
@@ -27,67 +31,50 @@ import com.dragon.agent.service.ConversationService;
 public class ConversationController {
 
     private final ConversationService conversationService;
+    private final SecurityHelper securityHelper;
 
-    public ConversationController(ConversationService conversationService) {
+    public ConversationController(ConversationService conversationService,
+                                  SecurityHelper securityHelper) {
         this.conversationService = conversationService;
+        this.securityHelper = securityHelper;
     }
 
-    /**
-     * GET /api/conversations
-     *
-     * 返回所有会话的 ID 和标题列表，按创建时间倒序排列。
-     *
-     * 响应示例：
-     *   [{"id": "uuid-1", "title": "解释相对论"}, {"id": "uuid-2", "title": "你好"}]
-     *
-     * @return 会话摘要列表
-     */
     @GetMapping
-    public ResponseEntity<List<Map<String, String>>> listConversations() {
-        return ResponseEntity.ok(conversationService.listConversations());
+    public Mono<ResponseEntity<List<Map<String, String>>>> listConversations() {
+        return securityHelper.currentUsername()
+                .map(username -> ResponseEntity.ok(
+                        conversationService.listConversations(username)));
     }
 
-    /**
-     * GET /api/conversations/{id}
-     *
-     * 获取指定会话的完整消息历史和元信息。
-     *
-     * 响应示例：
-     *   {
-     *     "conversationId": "uuid-1",
-     *     "messages": [{"messageType": "USER", "text": "你好"}, ...],
-     *     "count": 2
-     *   }
-     *
-     * @param id 会话 ID
-     * @return 会话详情，包含消息列表和数量
-     */
     @GetMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> getConversation(@PathVariable String id) {
-        var messages = conversationService.getMessages(id);
-        return ResponseEntity.ok(Map.of(
-                "conversationId", id,
-                "messages", messages,
-                "count", messages.size()));
+    public Mono<ResponseEntity<Map<String, Object>>> getConversation(@PathVariable String id) {
+        return securityHelper.currentUsername()
+                .flatMap(username -> {
+                    if (!conversationService.isOwner(id, username)) {
+                        return Mono.just(ResponseEntity.status(403)
+                                .body(Map.of("error", "无权访问此会话")));
+                    }
+                    List<Message> messages = conversationService.getMessages(id);
+                    return Mono.just(ResponseEntity.ok(Map.of(
+                            "conversationId", id,
+                            "messages", messages,
+                            "count", messages.size())));
+                });
     }
 
-    /**
-     * DELETE /api/conversations/{id}
-     *
-     * 清除指定会话的全部历史消息，会话 ID 本身不会被删除。
-     *
-     * 响应示例：
-     *   {"conversationId": "uuid-1", "cleared": true, "timestamp": "2026-05-31T12:00:00Z"}
-     *
-     * @param id 会话 ID
-     * @return 清除确认
-     */
     @DeleteMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> clearConversation(@PathVariable String id) {
-        conversationService.clearConversation(id);
-        return ResponseEntity.ok(Map.of(
-                "conversationId", id,
-                "cleared", true,
-                "timestamp", Instant.now()));
+    public Mono<ResponseEntity<Map<String, Object>>> clearConversation(@PathVariable String id) {
+        return securityHelper.currentUsername()
+                .flatMap(username -> {
+                    if (!conversationService.isOwner(id, username)) {
+                        return Mono.just(ResponseEntity.status(403)
+                                .body(Map.of("error", "无权操作此会话")));
+                    }
+                    conversationService.clearConversation(id, username);
+                    return Mono.just(ResponseEntity.ok(Map.of(
+                            "conversationId", id,
+                            "cleared", true,
+                            "timestamp", Instant.now())));
+                });
     }
 }

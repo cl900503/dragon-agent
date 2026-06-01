@@ -1,0 +1,24 @@
+# ============================================================
+# Dragon Agent 开发环境配置
+# 激活方式: spring.profiles.active=dev
+# ============================================================
+
+spring:
+  # MySQL 数据源——开发环境使用本地数据库
+  datasource:
+    url: jdbc:mysql://localhost:3306/dragon_agent?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf-8&allowPublicKeyRetrieval=true
+    username: root
+    password: ${MYSQL_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  # JPA 配置——开发阶段自动建表
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    open-in-view: false
+
+  # WebFlux Session 超时
+  webflux:
+    session:
+      timeout: 1h

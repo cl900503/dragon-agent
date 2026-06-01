@@ -32,5 +32,8 @@ build/
 ### VS Code ###
 .vscode/
 
+### META-INF ###
+src/main/resources/META-INF/
+
 ### Secrets ###
 src/main/resources/config/ai.properties

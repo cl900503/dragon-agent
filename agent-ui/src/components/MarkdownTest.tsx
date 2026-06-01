@@ -8,15 +8,8 @@
  * @since 2026-05-31
  */
 
-import ReactMarkdown from 'react-markdown'
-import type { Components } from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import remarkMath from 'remark-math'
-import rehypeKatex from 'rehype-katex'
-import rehypeRaw from 'rehype-raw'
-import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
-import CodeBlock from './CodeBlock'
-import MermaidBlock from './MermaidBlock'
+import { defaultSchema } from 'rehype-sanitize'
+import MarkdownRenderer from './MarkdownRenderer'
 import './MarkdownTest.css'
 
 /**
@@ -35,30 +28,6 @@ const testSchema = {
       ['size'],
       ['face'],
     ],
-  },
-}
-
-/** 测试面板 Markdown 自定义渲染组件 */
-const mdComponents: Components = {
-  code({ className, children, ...props }) {
-    const match = /language-(\w+)/.exec(className || '')
-    const code = String(children).replace(/\n$/, '')
-    if (match) {
-      if (match[1] === 'mermaid') return <MermaidBlock code={code} idPrefix="mermaid-test" />
-      return <CodeBlock code={code} lang={match[1]} />
-    }
-    return (
-      <code className={className} {...props}>
-        {children}
-      </code>
-    )
-  },
-  a({ href, children, ...props }) {
-    return (
-      <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
-        {children}
-      </a>
-    )
   },
 }
 
@@ -307,16 +276,9 @@ export default function MarkdownTest() {
   return (
     <div className="markdown-test-panel">
       <h1>Markdown 语法测试面板</h1>
-      <div className="markdown-body">
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm, remarkMath]}
-          remarkRehypeOptions={{ allowDangerousHtml: true }}
-          rehypePlugins={[rehypeKatex, rehypeRaw, [rehypeSanitize, testSchema]]}
-          components={mdComponents}
-        >
-          {testMarkdown}
-        </ReactMarkdown>
-      </div>
+      <MarkdownRenderer sanitizeSchema={testSchema} mermaidIdPrefix="mermaid-test">
+        {testMarkdown}
+      </MarkdownRenderer>
     </div>
   )
 }

@@ -1,14 +1,17 @@
 import type { ConversationSummary } from '../api'
+import ChevronIcon from './ChevronIcon'
 import './Sidebar.css'
 
 interface Props {
   conversations: ConversationSummary[]
   activeId: string
   collapsed: boolean
+  username: string | null
   onSelect: (id: string) => void
   onDelete: (id: string) => void
   onNewChat: () => void
   onToggle: () => void
+  onLogout: () => void
 }
 
 /**
@@ -24,19 +27,19 @@ export default function Sidebar({
   conversations,
   activeId,
   collapsed,
+  username,
   onSelect,
   onDelete,
   onNewChat,
   onToggle,
+  onLogout,
 }: Props) {
   return (
     <>
       {/* 折叠态下的展开按钮 */}
       {collapsed && (
         <button className="sidebar-expand-btn" onClick={onToggle} title="展开侧边栏">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <polyline points="9 18 15 12 9 6" />
-          </svg>
+          <ChevronIcon direction="right" size={18} />
         </button>
       )}
 
@@ -44,9 +47,7 @@ export default function Sidebar({
         <div className="sidebar-header">
           <span className="sidebar-title">会话列表</span>
           <button className="sidebar-collapse-btn" onClick={onToggle} title="折叠侧边栏">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="15 18 9 12 15 6" />
-            </svg>
+            <ChevronIcon direction="left" size={16} />
           </button>
         </div>
 
@@ -84,6 +85,21 @@ export default function Sidebar({
               </button>
             </div>
           ))}
+        </div>
+
+        <div className="sidebar-footer">
+          <div className="sidebar-user">
+            <span className="user-avatar">👤</span>
+            <span className="user-name">{username}</span>
+          </div>
+          <button className="logout-btn" onClick={onLogout} title="退出登录">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+            退出登录
+          </button>
         </div>
       </aside>
     </>

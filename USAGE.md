@@ -9,20 +9,39 @@ Dragon Agent 是一个企业级 AI 对话平台，后端基于 **Spring Boot 4 +
 核心特性：
 
 - 流式 SSE 对话，三种标准事件类型（thinking / content / done）
-- 基于 Spring AI Chat Memory 的多轮对话记忆，会话自动持久化
+- 用户注册/登录认证（Spring Security + BCrypt），多用户会话隔离
+- 基于 Spring AI JdbcChatMemory 的消息持久化，数据存入 MySQL，重启不丢失
 - 左侧会话列表（新建、切换、删除），右侧问题导航（快速跳转到历史提问）
 - Markdown 实时渲染（GFM、LaTeX 数学公式、Mermaid 图表、语法高亮）
-- 严格前后端分离，RESTful API + SSE，无状态通信
+- 严格前后端分离，RESTful API + SSE，WebSession 认证
 
 ## 环境要求
 
-- JDK 21 或更高
-- Maven 3.9+（可使用项目自带的 `mvnw`，无需手动安装）
-- Node.js 20+ 和 npm
+| 组件 | 要求 | 说明 |
+|------|------|------|
+| JDK | 21+ | 编译和运行后端 |
+| Maven | 3.9+ | 可使用项目自带的 `mvnw`，无需手动安装 |
+| Node.js | 20+ | 编译和运行前端 |
+| MySQL | 8.x | 用户数据、会话元数据和消息持久化 |
+| Docker | 可选 | 快速启动 MySQL |
 
 ## 快速启动
 
-### 1. 配置 API Key
+### 1. 启动 MySQL
+
+使用 Docker 快速启动：
+
+```bash
+docker run -d --name mysql-dragon \
+  -e MYSQL_ROOT_PASSWORD=root \
+  -e MYSQL_DATABASE=dragon_agent \
+  -p 3306:3306 \
+  mysql:8.0
+```
+
+或使用已有的 MySQL 实例，确保 `dragon_agent` 数据库存在（可通过 `createDatabaseIfNotExist=true` 自动创建）。
+
+### 2. 配置 API Key
 
 ```bash
 cd agent
@@ -40,16 +59,21 @@ AI_MODEL=deepseek-chat
 
 `ai.properties` 已加入 `.gitignore`，不会被提交到版本库。
 
-### 2. 启动后端
+### 3. 启动后端
 
 ```bash
 cd agent
+
+# 开发环境（默认 dev profile）
 ./mvnw spring-boot:run
+
+# 生产环境
+./mvnw spring-boot:run -Dspring-boot.run.profiles=prod
 ```
 
 后端运行在 `http://localhost:8080`，健康检查端点：`/actuator/health`。
 
-### 3. 启动前端
+### 4. 启动前端
 
 ```bash
 cd agent-ui
@@ -59,30 +83,127 @@ npm run dev
 
 前端开发服务器运行在 `http://localhost:5173`，Vite 自动代理 `/api` 请求到后端。
 
-### 4. 开始对话
+### 5. 开始使用
 
-浏览器打开 `http://localhost:5173`，输入消息即可开始对话。
+浏览器打开 `http://localhost:5173`：
+1. 注册新账号（用户名 + 密码）
+2. 自动登录，开始对话
+3. 左侧会话列表管理多个会话
+4. 退出登录后重新登录，历史会话和消息仍存在
 
 开发模式下，顶部 "Markdown 测试" 按钮可查看所有支持的 Markdown 语法和 Mermaid 图表。
 
+## 环境变量与配置
+
+### 必需环境变量
+
+| 变量 | 说明 | 示例 |
+|------|------|------|
+| `AI_API_KEY` | DeepSeek API Key | `sk-xxxx` |
+| `AI_BASE_URL` | API 基础地址 | `https://api.deepseek.com` |
+| `AI_MODEL` | 模型名称 | `deepseek-chat` |
+
+### 可选环境变量
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `MYSQL_PASSWORD` | MySQL 密码 | `root`（仅 dev profile） |
+| `MYSQL_URL` | MySQL JDBC URL（prod profile 必需） | — |
+| `MYSQL_USER` | MySQL 用户名（prod profile 必需） | — |
+| `CORS_ORIGINS` | 允许的前端域名，逗号分隔 | `http://localhost:5173` |
+| `PORT` | 服务端口（prod profile） | `8080` |
+
+### Spring Profile
+
+项目支持两个 profile：
+
+**dev（默认）**：
+- 使用 `application-dev.yaml`，包含本地 MySQL 连接信息
+- `ddl-auto: update` 自动同步数据库 schema
+- DEBUG 级日志，方便开发调试
+
+**prod**：
+- 使用 `application-prod.yaml`，所有数据库连接信息通过环境变量注入
+- `ddl-auto: validate` 禁止自动建表
+- INFO 级日志
+- `PORT` 环境变量控制服务端口
+
+切换 profile：
+
+```bash
+# 开发（默认，无需指定）
+./mvnw spring-boot:run
+
+# 生产
+export MYSQL_URL=jdbc:mysql://prod-host:3306/dragon_agent
+export MYSQL_USER=app_user
+export MYSQL_PASSWORD=secret
+./mvnw spring-boot:run -Dspring-boot.run.profiles=prod
+```
+
 ## API 接口
 
-### POST /api/chat — 同步对话
+### 认证接口
+
+**POST /api/auth/register — 注册**
+
+```
+POST /api/auth/register
+Content-Type: application/json
+
+{ "username": "alice", "password": "123456" }
+
+HTTP 201 Created
+{ "username": "alice", "message": "注册成功" }
+```
+
+- 用户名已存在返回 409
+- 注册成功自动登录，Set-Cookie 下发 SESSION
+
+**POST /api/auth/login — 登录**
+
+```
+POST /api/auth/login
+Content-Type: application/json
+
+{ "username": "alice", "password": "123456" }
+
+HTTP 200 OK
+{ "username": "alice", "message": "登录成功" }
+```
+
+**POST /api/auth/logout — 退出登录**
+
+```
+POST /api/auth/logout
+
+HTTP 200 OK
+```
+
+**GET /api/auth/me — 检查当前会话**
+
+```
+GET /api/auth/me
+
+HTTP 200 OK
+{ "username": "alice", "message": "已登录" }
+
+HTTP 401 Unauthorized
+{ "username": null, "message": "未登录" }
+```
+
+### AI 对话接口
+
+**POST /api/chat — 同步对话**
 
 等待 AI 完整回复后一次性返回。
-
-**请求：**
 
 ```
 POST /api/chat
 Content-Type: application/json
 
 { "message": "你好，请介绍一下自己", "conversationId": "可选" }
-```
 
-**响应：**
-
-```
 HTTP 200 OK
 Content-Type: text/plain
 X-Conversation-Id: uuid-xxxx
@@ -90,11 +211,9 @@ X-Conversation-Id: uuid-xxxx
 你好！我是 Dragon Agent...
 ```
 
-### POST /api/stream — 流式对话（SSE）
+**POST /api/stream — 流式对话（SSE）**
 
-通过 Server-Sent Events 逐 token 推送，实现打字机效果。
-
-**请求：**
+通过 Server-Sent Events 逐 token 推送。
 
 ```
 POST /api/stream
@@ -103,27 +222,19 @@ Content-Type: application/json
 { "message": "请用 Markdown 写一份报告", "conversationId": "可选" }
 ```
 
-**SSE 事件类型：**
+SSE 事件类型：
 
 | 事件 | 含义 | 必选 |
 |------|------|------|
-| `event:thinking` | 推理模型的思考过程 token | 否（仅推理模型产生） |
-| `event:content` | 正文回复 token | 是（所有模型） |
-| `event:done` | 流结束信号，固定为最后一个事件 | 是 |
+| `event:thinking` | 推理模型的思考过程 token | 否 |
+| `event:content` | 正文回复 token | 是 |
+| `event:done` | 流结束信号 | 是 |
 
-**典型时序：**
+### 会话管理接口
 
-```
-# 推理模型（如 DeepSeek R1）
-event:thinking → event:thinking → ... → event:content → event:content → ... → event:done
+所有会话操作按当前登录用户隔离，非属主返回 403。
 
-# 普通模型（如 DeepSeek V3）
-event:content → event:content → ... → event:done
-```
-
-### 会话管理 API
-
-**GET /api/conversations — 获取所有会话列表**
+**GET /api/conversations — 会话列表**
 
 ```
 HTTP 200 OK
@@ -133,61 +244,60 @@ HTTP 200 OK
 ]
 ```
 
-按创建时间倒序排列，最新会话在前。
-
-**GET /api/conversations/{id} — 获取会话详情**
+**GET /api/conversations/{id} — 会话详情**
 
 ```
 HTTP 200 OK
 {
   "conversationId": "uuid-1",
-  "messages": [
-    { "messageType": "USER", "text": "你好" },
-    { "messageType": "ASSISTANT", "text": "你好！有什么可以帮你的？" }
-  ],
+  "messages": [...],
   "count": 2
 }
 ```
 
-**DELETE /api/conversations/{id} — 清除会话历史**
+**DELETE /api/conversations/{id} — 删除会话**
 
 ```
 HTTP 200 OK
-{ "conversationId": "uuid-1", "cleared": true, "timestamp": "2026-05-31T12:00:00Z" }
+{ "conversationId": "uuid-1", "cleared": true, "timestamp": "..." }
+```
+
+### 健康检查
+
+```
+GET /actuator/health
+
+HTTP 200 OK
+{ "status": "UP" }
 ```
 
 ### 错误响应格式
-
-所有接口异常统一返回以下 JSON 结构：
 
 ```json
 {
   "status": 400,
   "error": "Bad Request",
-  "message": "message: 消息内容不能为空",
-  "timestamp": "2026-05-31T12:00:00Z"
+  "message": "message: 消息内容不能为空"
 }
 ```
 
 | 状态码 | 场景 |
 |--------|------|
-| 400 | 请求参数校验失败（message 为空或超长等） |
+| 400 | 请求参数校验失败 |
+| 401 | 未登录或认证失败 |
+| 403 | 无权访问此会话 |
+| 409 | 用户名已存在 |
 | 500 | 服务端内部错误 |
 
-### GET /actuator/health — 健康检查
+## 数据库
 
-```
-HTTP 200 OK
-{ "status": "UP" }
-```
+启动后端后，以下数据表自动创建：
 
-## 多模型兼容
-
-前后端通过标准 SSE 事件协议解耦，接入新模型时：
-
-- 推理模型（有思考过程）：在 `AiService.extractReasoningContent()` 中追加对应的 `instanceof` 分支即可，前端无需改动
-- 普通模型（无思考过程）：直接使用现有 `event:content` 通道，零改动接入
-- 模型特有的类型判断封装在 Service 层，Controller 层只依赖 Spring AI 标准 API（`AssistantMessage`），不接触任何模型特有实现类
+| 表 | 说明 | 管理方式 |
+|----|------|----------|
+| `users` | 用户账号信息，BCrypt 密码哈希 | JPA Entity |
+| `conversations` | 会话元数据（归属用户、标题、创建时间） | JPA Entity |
+| `SPRING_AI_CHAT_MEMORY` | 对话消息，Spring AI 自动管理 | JdbcChatMemory |
 
 ## 项目结构
 
@@ -200,82 +310,80 @@ dragon-agent/
 │       ├── java/com/dragon/agent/
 │       │   ├── AgentApplication.java       # 启动入口
 │       │   ├── config/
-│       │   │   └── CorsConfig.java         # CORS 配置（WebFlux）
+│       │   │   ├── CorsConfig.java         # CORS 配置
+│       │   │   ├── CustomReactiveAuthenticationManager.java
+│       │   │   └── SecurityConfig.java     # WebFlux Security 配置
 │       │   ├── controller/
+│       │   │   ├── AuthController.java     # 认证接口（注册/登录/退出）
 │       │   │   ├── ChatController.java     # 同步对话接口
-│       │   │   ├── StreamController.java   # SSE 流式接口
-│       │   │   └── ConversationController.java  # 会话管理接口
+│       │   │   ├── ConversationController.java  # 会话管理接口
+│       │   │   └── StreamController.java   # SSE 流式接口
 │       │   ├── dto/
-│       │   │   ├── ChatRequest.java        # 请求 DTO（含校验）
-│       │   │   └── ErrorResponse.java      # 错误响应体
+│       │   │   ├── AuthResponse.java       # 认证响应体
+│       │   │   ├── ChatRequest.java        # 请求 DTO
+│       │   │   ├── ErrorResponse.java      # 错误响应体
+│       │   │   ├── LoginRequest.java       # 登录请求
+│       │   │   └── RegisterRequest.java    # 注册请求
+│       │   ├── entity/
+│       │   │   ├── ConversationEntity.java # 会话实体
+│       │   │   └── UserEntity.java         # 用户实体
 │       │   ├── exception/
-│       │   │   └── GlobalExceptionHandler.java  # 全局异常处理
-│       │   └── service/
-│       │       ├── AiService.java          # AI 对话服务（封装 ChatClient）
-│       │       └── ConversationService.java  # 会话管理服务（ChatMemory 操作）
+│       │   │   ├── GlobalExceptionHandler.java
+│       │   │   └── UsernameAlreadyExistsException.java
+│       │   ├── repository/
+│       │   │   ├── ConversationRepository.java
+│       │   │   └── UserRepository.java
+│       │   ├── service/
+│       │   │   ├── AiService.java          # AI 对话服务
+│       │   │   ├── ConversationService.java  # 会话管理
+│       │   │   └── UserService.java        # 用户服务
+│       │   └── support/
+│       │       └── SecurityHelper.java     # Security 工具组件
 │       └── resources/
-│           ├── application.yaml
+│           ├── application.yaml            # 基础配置（所有 profile 共享）
+│           ├── application-dev.yaml        # 开发环境配置
+│           ├── application-prod.yaml       # 生产环境配置模板
 │           └── config/
-│               ├── ai.properties.example   # 配置模板（可提交到版本库）
-│               └── ai.properties           # 实际配置（gitignore 保护）
+│               ├── ai.properties.example   # 配置模板
+│               └── ai.properties           # 实际配置（gitignore）
 ├── agent-ui/                               # 前端 React
 │   ├── package.json
 │   ├── vite.config.ts
+│   ├── index.html
 │   └── src/
 │       ├── main.tsx                        # 应用入口
-│       ├── App.tsx / App.css               # 主应用组件 + 布局
+│       ├── App.tsx / App.css               # 主应用 + 布局
 │       ├── index.css                       # 全局样式 + CSS 变量
 │       ├── types.ts                        # TypeScript 类型定义
-│       ├── api.ts                          # SSE 客户端 + 会话管理 API 封装
+│       ├── api.ts                          # SSE 客户端 + 会话 API
+│       ├── auth.ts                         # 认证 API 封装
+│       ├── hooks/
+│       │   ├── useAuth.ts                  # 认证状态 hook
+│       │   └── useConversation.ts          # 会话管理 hook
 │       └── components/
 │           ├── ChatInput.tsx / .css        # 聊天输入框
-│           ├── MessageBubble.tsx / .css    # 消息气泡（Markdown + 思考过程）
-│           ├── CodeBlock.tsx               # 代码高亮组件
+│           ├── ChevronIcon.tsx             # 折叠/展开箭头图标（Sidebar/QuestionNav 共用）
+│           ├── CodeBlock.tsx / .css        # 代码高亮（Shiki）
+│           ├── LoginPage.tsx / .css        # 登录/注册页
+│           ├── MarkdownRenderer.tsx        # 公共 Markdown 渲染组件
+│           ├── MarkdownTest.tsx / .css     # 开发测试面板（DEV 模式）
 │           ├── MermaidBlock.tsx / .css     # Mermaid 图表渲染
-│           ├── Sidebar.tsx / .css          # 左侧会话列表
+│           ├── MessageBubble.tsx / .css    # 消息气泡
 │           ├── QuestionNav.tsx / .css      # 右侧问题导航
-│           └── MarkdownTest.tsx / .css     # 开发测试面板（仅 DEV 模式可见）
+│           └── Sidebar.tsx / .css          # 左侧会话列表
+├── .gitignore                              # 仓库级忽略规则
 ├── README.md
 ├── USAGE.md                                # 本文件
 └── LICENSE                                 # Apache 2.0
 ```
 
-## 架构关键设计
+## 多模型兼容
 
-### 后端分层
+前后端通过标准 SSE 事件协议解耦，接入新模型时：
 
-```
-Controller（接收请求、参数校验）
-  → AiService（AI 对话、模型适配）
-  → ConversationService（会话管理、ID 解析）
-    → Spring AI ChatClient（标准 API）
-      → MessageChatMemoryAdvisor（自动管理对话记忆）
-        → ChatMemory（内存存储，可替换为持久化实现）
-```
-
-- Controller 层不依赖任何模型特有类，所有模型适配逻辑封装在 AiService
-- conversationId 解析逻辑的唯一来源是 ConversationService.resolveConversationId()
-- 推理内容提取使用 AiService 私有方法 extractReasoningContent()，对 Controller 透明
-- 会话生命周期（列表、详情、清除）由 ConversationService 统一管理
-
-### 前端组件树
-
-```
-App
-├── Sidebar（会话管理：新建、切换、删除）
-├── .app（主区域）
-│   ├── Header
-│   ├── WelcomeLayout（无消息时：欢迎内容 + 输入框整体居中）
-│   ├── ChatScroll（有消息时：消息列表）
-│   └── ChatInput（输入框）
-└── QuestionNav（右侧问题导航：快速跳转到历史提问）
-```
-
-### SSE 流处理
-
-- 前端 `api.ts` 封装完整 SSE 解析逻辑，App 组件不处理原始协议
-- done 检测采用双重机制：`event:done` + ReadableStream 关闭兜底
-- `safeDone()` 防止重复触发 onDone 回调
+- 推理模型（有思考过程）：在 `AiService.extractReasoningContent()` 中追加对应的 `instanceof` 分支，前端无需改动
+- 普通模型（无思考过程）：直接使用现有 `event:content` 通道
+- 模型特有的类型判断封装在 Service 层，Controller 层只依赖 Spring AI 标准 API
 
 ## 构建与部署
 
@@ -284,15 +392,7 @@ App
 ```bash
 cd agent
 ./mvnw clean package -DskipTests
-java -jar target/agent-0.0.1-SNAPSHOT.jar
-```
-
-启动前设置环境变量：
-
-```bash
-export AI_API_KEY=sk-your-key
-export AI_BASE_URL=https://api.deepseek.com
-export AI_MODEL=deepseek-chat
+java -jar target/agent-0.0.1-SNAPSHOT.jar --spring.profiles.active=prod
 ```
 
 ### 前端
@@ -303,12 +403,14 @@ npm run build
 # 静态文件输出到 dist/，可部署到 Nginx 或 CDN
 ```
 
-生产环境部署时，建议使用 Nginx 反向代理统一前后端域名，避免 CORS 问题。
-CORS 默认仅允许 `http://localhost:5173`，生产环境需在 `CorsConfig` 中调整为实际域名。
+生产环境建议使用 Nginx 反向代理统一前后端域名，通过 `CORS_ORIGINS` 环境变量配置允许的域名。
 
-## 开发提示
+### 生产环境检查清单
 
-- `MarkdownTest` 仅在开发模式（`import.meta.env.DEV`）下可见，生产构建自动隐藏
-- 在对话中发送 ` ```mermaid ` 代码块即可渲染流程图、时序图、类图等
-- Mermaid 图表渲染组件已抽取为独立共享组件（`MermaidBlock`），避免代码重复
-- 前端 `api.ts` 中的 SSE 客户端同时兼容 `event:done` 事件和 ReadableStream 关闭两种结束信号
+- [ ] 设置 `spring.profiles.active=prod`
+- [ ] 通过环境变量注入 `MYSQL_URL`、`MYSQL_USER`、`MYSQL_PASSWORD`
+- [ ] 通过环境变量注入 `AI_API_KEY`、`AI_BASE_URL`、`AI_MODEL`
+- [ ] 设置 `CORS_ORIGINS` 为生产前端域名
+- [ ] 确保 `ddl-auto=validate`（禁止自动建表）
+- [ ] 使用反向代理（Nginx）统一前后端域名
+- [ ] 配置 HTTPS

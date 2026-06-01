@@ -25,8 +25,7 @@ public class GlobalExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     /**
-     * 处理 @Valid 校验失败（如 msg 字段为空）。
-     * 提取所有字段错误拼接成可读消息返回。
+     * 处理 @Valid 校验失败（如字段为空）。
      */
     @ExceptionHandler(WebExchangeBindException.class)
     public ResponseEntity<ErrorResponse> handleValidation(WebExchangeBindException ex) {
@@ -36,6 +35,25 @@ public class GlobalExceptionHandler {
                 .orElse("参数校验失败");
         return ResponseEntity.badRequest()
                 .body(ErrorResponse.of(400, "Bad Request", msg));
+    }
+
+    /**
+     * 注册用户名冲突。
+     */
+    @ExceptionHandler(UsernameAlreadyExistsException.class)
+    public ResponseEntity<ErrorResponse> handleConflict(UsernameAlreadyExistsException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ErrorResponse.of(409, "Conflict", ex.getMessage()));
+    }
+
+    /**
+     * 认证失败——BadCredentialsException 等。
+     */
+    @ExceptionHandler(org.springframework.security.core.AuthenticationException.class)
+    public ResponseEntity<ErrorResponse> handleAuth(
+            org.springframework.security.core.AuthenticationException ex) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(ErrorResponse.of(401, "Unauthorized", ex.getMessage()));
     }
 
     /**
