@@ -1,7 +1,5 @@
 /**
- * 聊天输入框组件。
- *
- * 支持 Enter 发送、Shift+Enter 换行、自动调整高度（最大 10 行）。
+ * 聊天输入框组件——Enter 发送、Shift+Enter 换行、RAG 开关。
  *
  * @author 陈龙
  * @since 2026-05-31
@@ -11,13 +9,15 @@ import { useRef, useState, type KeyboardEvent } from 'react'
 import './ChatInput.css'
 
 interface Props {
-  /** 是否正在流式生成（同时控制禁用态和显示停止按钮） */
   streaming: boolean
   onSend: (msg: string) => void
   onStop: () => void
+  /** RAG 知识库开关 */
+  ragEnabled: boolean
+  onRagToggle: (v: boolean) => void
 }
 
-export default function ChatInput({ streaming, onSend, onStop }: Props) {
+export default function ChatInput({ streaming, onSend, onStop, ragEnabled, onRagToggle }: Props) {
   const [text, setText] = useState('')
   const ref = useRef<HTMLTextAreaElement>(null)
 
@@ -26,34 +26,19 @@ export default function ChatInput({ streaming, onSend, onStop }: Props) {
     if (!msg || streaming) return
     onSend(msg)
     setText('')
-    // 发送后重置 textarea 高度
-    requestAnimationFrame(() => {
-      if (ref.current) ref.current.style.height = ''
-    })
+    requestAnimationFrame(() => { if (ref.current) ref.current.style.height = '' })
   }
 
-  // Enter 发送，Shift+Enter 换行
   function onKeyDown(e: KeyboardEvent) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      send()
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
   }
 
-  // 根据内容自动调整高度，最大 10 行
   function autoResize() {
-    const el = ref.current
-    if (!el) return
-
-    el.style.height = 'auto'
-    void el.offsetHeight // 强制回流以获取准确的 scrollHeight
-
+    const el = ref.current; if (!el) return
+    el.style.height = 'auto'; void el.offsetHeight
     const style = getComputedStyle(el)
     const lineH = parseFloat(style.lineHeight)
-    const padTop = parseFloat(style.paddingTop)
-    const padBot = parseFloat(style.paddingBottom)
-    const maxH = lineH * 10 + padTop + padBot
-
+    const maxH = lineH * 10 + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom)
     el.style.height = (el.scrollHeight > maxH ? maxH : el.scrollHeight) + 'px'
   }
 
@@ -61,15 +46,17 @@ export default function ChatInput({ streaming, onSend, onStop }: Props) {
     <div className="input-area">
       <div className="input-wrapper">
         <textarea
-          ref={ref}
-          value={text}
-          rows={1}
+          ref={ref} value={text} rows={1}
           placeholder="输入消息... (Enter 发送，Shift+Enter 换行)"
           disabled={streaming}
           onChange={e => { setText(e.target.value); autoResize() }}
           onKeyDown={onKeyDown}
         />
         <div className="input-toolbar">
+          <label className="rag-toggle" title="启用知识库检索">
+            <input type="checkbox" checked={ragEnabled} onChange={e => onRagToggle(e.target.checked)} />
+            <span className="rag-toggle-label">📚 知识库</span>
+          </label>
           {streaming ? (
             <button className="stop-btn" onClick={onStop} title="停止生成">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">

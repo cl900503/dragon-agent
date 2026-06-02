@@ -52,7 +52,7 @@ export function useConversation(isLoggedIn: boolean) {
 
   /** 发送消息，开始流式接收 */
   const handleSend = useCallback(
-    (msg: string) => {
+    (msg: string, enableRag: boolean = true) => {
       const userMsg: Message = {
         id: msgId(),
         role: 'user',
@@ -71,7 +71,7 @@ export function useConversation(isLoggedIn: boolean) {
       setStreaming(true)
       setError(null)
 
-      const controller = streamChat(msg, conversationIdRef.current, {
+      const controller = streamChat(msg, conversationIdRef.current, userMsg.id, aiMsg.id, enableRag, {
         onToken(text) {
           setMessages(prev => {
             const updated = [...prev]
@@ -97,14 +97,25 @@ export function useConversation(isLoggedIn: boolean) {
             return updated
           })
         },
-        onDone() {
+        onDone(docs: string[]) {
           setStreaming(false)
           abortRef.current = null
           setMessages(prev => {
             const updated = [...prev]
             const last = updated[updated.length - 1]
             if (last.role === 'assistant') {
-              updated[updated.length - 1] = { ...last, thinking: false }
+              // 从 done 事件中解析检索结果：每行 "文件名|片段"
+              const traces = docs.length > 0
+                ? docs.map(line => {
+                    const [name, snippet] = line.split('|')
+                    return { documentName: name || line, chunkIndex: 0, contentSnippet: snippet || '' }
+                  })
+                : undefined
+              updated[updated.length - 1] = {
+                ...last,
+                thinking: false,
+                retrievalTraces: traces as any,
+              }
             }
             return updated
           })
@@ -175,9 +186,16 @@ export function useConversation(isLoggedIn: boolean) {
           id: msgId(),
           role: bm.messageType === 'USER' ? ('user' as const) : ('assistant' as const),
           content: bm.text,
-          reasoning: '',
+          reasoning: bm.reasoning || '',
           thinking: false,
+          retrievalTraces: bm.retrievalTraces,
         }))
+        // 将 USER 消息的检索来源复制到下一条 ASSISTANT 消息（用于展示）
+        for (let i = 1; i < mapped.length; i++) {
+          if (mapped[i].role === 'assistant' && !mapped[i].retrievalTraces) {
+            mapped[i].retrievalTraces = mapped[i - 1].retrievalTraces
+          }
+        }
         setAllMessages(prev => ({ ...prev, [id]: mapped }))
         setMessages(mapped)
         setActiveConversationId(id)

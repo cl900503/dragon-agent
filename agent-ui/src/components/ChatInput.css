@@ -52,8 +52,27 @@
   color: #8b949e;
 }
 
+/* 输入框上方已上传文件标签 */
+.input-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 12px 2px;
+}
+
+/* RAG 知识库开关 */
+.rag-toggle {
+  display: flex; align-items: center; gap: 5px; cursor: pointer;
+  font-size: 12px; color: #94a3b8; user-select: none;
+  padding: 2px 6px; border-radius: 6px; transition: all 0.15s;
+}
+.rag-toggle:hover { background: #f1f5f9; }
+.rag-toggle input[type="checkbox"] { accent-color: var(--primary, #4f46e5); }
+.rag-toggle input:checked + .rag-toggle-label { color: var(--primary, #4f46e5); font-weight: 600; }
+
 /* 底部工具栏 — 在 wrapper 内部，始终贴底 */
 .input-toolbar {
+  justify-content: space-between;
   display: flex;
   justify-content: flex-end;
   padding: 0 8px 8px;

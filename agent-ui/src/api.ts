@@ -16,12 +16,14 @@
  * @since 2026-05-31
  */
 
+import type { UploadedDocument } from './types'
+
 // ---- 类型定义 ----
 
 export interface StreamCallbacks {
   onToken: (text: string) => void
   onThinking: (text: string) => void
-  onDone: () => void
+  onDone: (retrievedDocs: string[]) => void
   onError: (error: Error) => void
 }
 
@@ -40,6 +42,16 @@ export interface ConversationMessages {
 export interface BackendMessage {
   messageType: 'USER' | 'ASSISTANT'
   text: string
+  reasoning?: string
+  /** RAG 检索追溯 */
+  retrievalTraces?: RetrievalTrace[]
+}
+
+export interface RetrievalTrace {
+  documentName: string
+  chunkIndex: number
+  score?: number
+  contentSnippet: string
 }
 
 // ---- SSE 流式对话 ----
@@ -47,23 +59,27 @@ export interface BackendMessage {
 export function streamChat(
   msg: string,
   conversationId: string,
+  userMsgId: string,
+  aiMsgId: string,
+  enableRag: boolean,
   callbacks: StreamCallbacks,
 ): AbortController {
   const controller = new AbortController()
   const { onToken, onThinking, onDone, onError } = callbacks
 
   let doneCalled = false
+  let doneDocs: string[] = []
 
   function safeDone() {
     if (doneCalled) return
     doneCalled = true
-    onDone()
+    onDone(doneDocs)
   }
 
   fetch('/api/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: msg, conversationId }),
+    body: JSON.stringify({ message: msg, conversationId, userMsgId, aiMsgId, enableRag }),
     signal: controller.signal,
   })
     .then(async (response) => {
@@ -110,6 +126,10 @@ export function streamChat(
         if (type === 'thinking') {
           if (data) onThinking(data)
         } else if (type === 'done') {
+          // 解析 done 事件：每行 "文件名|片段"
+          if (data && data.trim()) {
+            doneDocs = data.split('\n').filter(Boolean)
+          }
           safeDone()
         } else {
           onToken(data || '\n')
@@ -173,5 +193,52 @@ export async function deleteConversation(id: string): Promise<void> {
     method: 'DELETE',
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
+}
+
+// ---- 文档管理 API ----
+
+/** 上传文件到资料库 */
+export async function uploadFile(file: File): Promise<UploadedDocument> {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const res = await fetch('/api/documents/upload', {
+    method: 'POST',
+    body: formData,
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: '上传失败' }))
+    throw new Error(err.message || `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+/** 获取资料库全部文档 */
+export async function fetchDocuments(): Promise<UploadedDocument[]> {
+  const res = await fetch('/api/documents')
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+/** 删除指定文档 */
+export async function deleteDocument(id: string): Promise<void> {
+  const res = await fetch(`/api/documents/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: '删除失败' }))
+    throw new Error(err.message || `HTTP ${res.status}`)
+  }
+}
+
+/** 重试处理失败文档 */
+export async function retryDocument(id: string): Promise<void> {
+  const res = await fetch(`/api/documents/${encodeURIComponent(id)}/retry`, { method: 'POST' })
+  if (!res.ok) throw new Error('重试失败')
+}
+
+/** 获取文档下载 URL */
+export function getDocumentDownloadUrl(id: string): string {
+  return `/api/documents/${encodeURIComponent(id)}/download`
 }
 

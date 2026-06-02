@@ -1,0 +1,17 @@
+[
+  {
+    "question": "小明的手机号是多少",
+    "ground_truth": "13800001111",
+    "answer": ""
+  },
+  {
+    "question": "工作满10年可以休多少天年假",
+    "ground_truth": "10天",
+    "answer": ""
+  },
+  {
+    "question": "公司的考勤制度是什么",
+    "ground_truth": "",
+    "answer": ""
+  }
+]

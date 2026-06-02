@@ -45,7 +45,9 @@ public class ChatController {
                 .flatMap(username -> {
                     String cid = conversationService.resolveConversationId(
                             request.conversationId(), username);
-                    return Mono.fromCallable(() -> aiService.chat(request.message(), cid))
+                    return Mono.fromCallable(() -> aiService.chat(
+                            request.message(), cid, request.enableRag(),
+                            request.userMsgId(), request.aiMsgId()))
                             .subscribeOn(Schedulers.boundedElastic())
                             .map(content -> {
                                 conversationService.updateConversationTitle(cid);

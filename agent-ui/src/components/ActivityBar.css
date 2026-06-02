@@ -1,0 +1,25 @@
+/* 左侧导航栏 */
+.activity-bar {
+  width: 64px; height: 100vh;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 12px 0;
+  background: #1e293b;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.activity-btn {
+  width: 52px;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 10px 4px;
+  border: none; border-radius: 10px;
+  background: transparent; color: #94a3b8;
+  cursor: pointer; transition: all 0.15s;
+  margin-bottom: 2px;
+}
+.activity-btn:hover { color: #e2e8f0; background: #334155; }
+.activity-btn.active { color: #fff; background: #4f46e5; }
+
+.activity-label { font-size: 10px; font-weight: 500; line-height: 1; }
+
+.activity-spacer { flex: 1; }

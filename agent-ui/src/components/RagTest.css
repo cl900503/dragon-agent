@@ -1,0 +1,79 @@
+.ragtest-page { flex: 1; overflow-y: auto; padding: 24px 32px; max-width: 860px; margin: 0 auto; width: 100%; }
+.ragtest-page h2 { margin: 0 0 18px; font-size: 20px; color: #1e293b; }
+
+/* 搜索栏 */
+.rt-search-bar { display: flex; gap: 8px; margin-bottom: 16px; }
+.rt-search-input {
+  flex: 1; padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 10px;
+  font-size: 14px; font-family: inherit; outline: none; transition: border-color 0.15s, box-shadow 0.15s;
+}
+.rt-search-input:focus { border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79,70,229,0.1); }
+.rt-search-btn {
+  padding: 10px 24px; border: none; border-radius: 10px; background: #4f46e5;
+  color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; white-space: nowrap; transition: background 0.15s;
+}
+.rt-search-btn:hover { background: #4338ca; }
+.rt-search-btn:disabled { background: #c7d2fe; cursor: not-allowed; }
+
+.rt-error { padding: 8px 12px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; color: #dc2626; font-size: 13px; margin-bottom: 12px; }
+
+/* 结果概览 */
+.rt-summary { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.rt-badge { padding: 4px 14px; border-radius: 14px; font-size: 13px; font-weight: 600; }
+.rt-badge.rt-hit { background: #dcfce7; color: #16a34a; }
+.rt-badge.rt-miss { background: #fef2f2; color: #ef4444; }
+.rt-elapsed { font-size: 12px; color: #94a3b8; font-family: monospace; }
+
+/* 分数分布条 */
+.rt-score-bar { display: flex; align-items: center; gap: 2px; height: 20px; margin-bottom: 18px; border-radius: 10px; overflow: hidden; background: #f1f5f9; }
+.rt-score-seg { height: 100%; background: #4f46e5; min-width: 4px; transition: opacity 0.3s; }
+.rt-score-label { flex-shrink: 0; font-size: 9px; color: #94a3b8; padding: 0 8px; white-space: nowrap; }
+
+/* Section */
+.rt-section { margin-bottom: 18px; }
+.rt-section h3 { font-size: 13px; color: #64748b; font-weight: 600; margin: 0 0 8px; }
+
+/* Chunk 列表 */
+.rt-chunks { display: flex; flex-direction: column; gap: 3px; }
+.rt-chunk { border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; transition: border-color 0.15s; }
+.rt-chunk:hover { border-color: #cbd5e1; }
+.rt-chunk-top { border-color: #a5b4fc; background: #fafafe; }
+
+.rt-chunk-header {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  cursor: pointer; user-select: none; transition: background 0.1s;
+}
+.rt-chunk-header:hover { background: #f8fafc; }
+.rt-chunk-num { font-weight: 700; font-size: 12px; color: #64748b; width: 24px; }
+.rt-chunk-doc { font-size: 13px; color: #4f46e5; font-weight: 500; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rt-chunk-idx { font-size: 11px; color: #94a3b8; font-family: monospace; }
+.rt-score { font-family: monospace; font-size: 12px; padding: 2px 8px; border-radius: 6px; font-weight: 600; }
+.rt-score-hi { background: #dcfce7; color: #16a34a; }
+.rt-score-md { background: #fef9c3; color: #ca8a04; }
+.rt-score-lo { background: #f1f5f9; color: #64748b; }
+.rt-chunk-toggle { font-size: 10px; color: #94a3b8; }
+
+.rt-chunk-body { padding: 0 12px 12px 46px; }
+.rt-chunk-meta { display: flex; gap: 16px; font-size: 11px; color: #94a3b8; margin-bottom: 6px; }
+.rt-chunk-text {
+  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;
+  padding: 10px 12px; font-size: 13px; line-height: 1.7; color: #334155;
+  white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow-y: auto;
+  margin: 0; font-family: inherit;
+}
+
+/* LLM 上下文 */
+.rt-context {
+  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+  padding: 14px; font-size: 12px; line-height: 1.7; color: #334155;
+  white-space: pre-wrap; word-break: break-word; max-height: 360px; overflow-y: auto; margin: 0;
+}
+
+/* 原始 JSON */
+.rt-raw-toggle { font-size: 12px; color: #94a3b8; cursor: pointer; user-select: none; }
+.rt-raw-toggle:hover { color: #64748b; }
+.rt-raw {
+  background: #1e293b; color: #e2e8f0; border-radius: 8px; padding: 12px 14px;
+  font-size: 11px; line-height: 1.6; overflow-x: auto; margin: 6px 0 0;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+}

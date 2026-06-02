@@ -65,6 +65,31 @@ export default function MessageBubble({ message }: Props) {
           </div>
         )}
 
+        {/* AI 回复底部——仅展示 AI 实际提到的文档 */}
+        {message.role === 'assistant'
+          && message.retrievalTraces
+          && message.retrievalTraces.length > 0
+          && (() => {
+            const allDocs = [...new Set(message.retrievalTraces!.map(t => t.documentName))]
+            // 只保留 AI 在回复中实际提到的文档
+            const cited = allDocs.filter(name => {
+              const short = name.replace(/\.[^.]+$/, '')
+              return message.content.includes(short) || message.content.includes(name)
+            })
+            if (cited.length === 0) return null
+            return (
+              <div className="citation-section">
+                <span className="citation-label">📚 来自本地知识库：</span>
+                {cited.map((name, i) => (
+                  <span key={name}>
+                    <span className="citation-doc">{name}</span>
+                    {i < cited.length - 1 && <span className="citation-sep">、</span>}
+                  </span>
+                ))}
+              </div>
+            )
+          })()}
+
         {/* 尚未收到任何 token 的纯等待状态 */}
         {message.thinking && !message.reasoning && !message.content && (
           <span className="dot-pulse" />

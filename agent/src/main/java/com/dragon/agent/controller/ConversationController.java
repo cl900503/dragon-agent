@@ -14,8 +14,6 @@ import org.springframework.web.bind.annotation.RestController;
 import com.dragon.agent.service.ConversationService;
 import com.dragon.agent.support.SecurityHelper;
 
-import org.springframework.ai.chat.messages.Message;
-
 import reactor.core.publisher.Mono;
 
 /**
@@ -54,7 +52,7 @@ public class ConversationController {
                         return Mono.just(ResponseEntity.status(403)
                                 .body(Map.of("error", "无权访问此会话")));
                     }
-                    List<Message> messages = conversationService.getMessages(id);
+                    List<Map<String, Object>> messages = conversationService.getMessages(id);
                     return Mono.just(ResponseEntity.ok(Map.of(
                             "conversationId", id,
                             "messages", messages,

@@ -1,27 +1,29 @@
 package com.dragon.agent.service;
 
+import java.util.UUID;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.model.Generation;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
+
+import com.dragon.agent.service.DocumentService.RagResult;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /**
- * AI 对话服务——所有 AI 调用的统一入口。
+ * AI 对话服务——同步/流式对话、RAG 检索增强、推理过程提取。
  *
- * 封装 Spring AI ChatClient，通过 MessageChatMemoryAdvisor 自动管理对话历史。
- * 推理内容提取逻辑封装在私有方法中，不泄漏到 Controller 层。
- *
- * 职责边界：
- *   - AI 对话调用（同步 / 流式）
- *   - 推理内容提取（模型特有逻辑，对外透明）
- *
- * 会话管理（ID 解析、消息存取、列表排序）由 {@link ConversationService} 负责。
+ * 通过 Spring AI ChatClient 调用 DeepSeek LLM，支持 MessageChatMemoryAdvisor
+ * 管理多轮对话历史。RAG 上下文以 system message 注入，不持久化到 ChatMemory。
+ * 文档服务在向量数据库未就绪时自动降级为纯对话模式。
  *
  * @author 陈龙
  * @since 2026-05-31
@@ -29,91 +31,161 @@ import reactor.core.publisher.Mono;
 @Service
 public class AiService {
 
+    private static final Logger log = LoggerFactory.getLogger(AiService.class);
+
     private final ChatClient chatClient;
+    private final DocumentService documentService;
+    private final ConversationService conversationService;
 
-    public AiService(ChatClient.Builder builder, ChatMemory chatMemory) {
+    /**
+     * 构造函数，DocumentService 在 Milvus 不可用时为 null 以保证启动不阻塞。
+     */
+    public AiService(ChatClient.Builder builder,
+                     ChatMemory chatMemory,
+                     @Autowired(required = false) DocumentService documentService,
+                     ConversationService conversationService) {
+        this.documentService = documentService;
+        this.conversationService = conversationService;
         this.chatClient = builder
-                .defaultAdvisors(
-                        MessageChatMemoryAdvisor.builder(chatMemory).build())
+                .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
                 .build();
     }
 
     /**
-     * 同步对话——等待 AI 完整回复后一次性返回。
+     * 同步对话——保存消息、检索知识库、调用 LLM、保存回复。
      *
      * @param message        用户消息
-     * @param conversationId 已解析的会话 ID
-     * @return AI 完整回复文本
+     * @param conversationId 会话 ID
+     * @param enableRag      是否启用知识库检索
+     * @param userMsgId      前端生成的用户消息 ID
+     * @param aiMsgId        前端生成的 AI 消息 ID
+     * @return AI 完整回复
      */
-    public String chat(String message, String conversationId) {
-        return chatClient.prompt()
+    public String chat(String message, String conversationId, boolean enableRag,
+                       String userMsgId, String aiMsgId) {
+        conversationService.saveUserMessage(userMsgId, conversationId, message);
+
+        RagResult rag = retrieveKnowledgeBase(message, enableRag);
+        if (!rag.isEmpty()) {
+            conversationService.saveRetrievalTraces(userMsgId, conversationId, rag.traces());
+        }
+
+        var prompt = chatClient.prompt()
                 .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId))
-                .user(message)
-                .call()
-                .content();
+                .user(message);
+        if (!rag.isEmpty()) {
+            prompt = prompt.system(buildSystemPrompt(rag.context()));
+        }
+
+        String response = prompt.call().content();
+        conversationService.saveAssistantMessage(aiMsgId, conversationId, response);
+        return response;
     }
 
     /**
-     * SSE 流式对话——逐 token 推送 AI 回复，实现打字机效果。
-     *
-     * 返回三种标准 SSE 事件：
-     *   event:thinking — 推理过程 token（仅推理模型产生）
-     *   event:content  — 正文回复 token
-     *   event:done     — 流结束信号
+     * SSE 流式对话——逐 token 推送，流结束后持久化消息和推理过程。
      *
      * @param message        用户消息
-     * @param conversationId 已解析的会话 ID
-     * @return SSE 事件流
+     * @param conversationId 会话 ID
+     * @param enableRag      是否启用知识库检索
+     * @param userMsgId      用户消息 ID
+     * @param aiMsgId        AI 消息 ID
+     * @return SSE 事件流（thinking / content / done）
      */
-    public Flux<ServerSentEvent<String>> stream(String message, String conversationId) {
+    public Flux<ServerSentEvent<String>> stream(String message, String conversationId,
+                                                 boolean enableRag,
+                                                 String userMsgId, String aiMsgId) {
+        conversationService.saveUserMessage(userMsgId, conversationId, message);
+
+        RagResult rag = retrieveKnowledgeBase(message, enableRag);
+        if (!rag.isEmpty()) {
+            conversationService.saveRetrievalTraces(userMsgId, conversationId, rag.traces());
+        }
+
+        var prompt = chatClient.prompt()
+                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId))
+                .user(message);
+        if (!rag.isEmpty()) {
+            prompt = prompt.system(buildSystemPrompt(rag.context()));
+        }
+
+        String doneData = buildDoneData(rag);
+
         ServerSentEvent<String> doneEvent = ServerSentEvent.<String>builder()
-                .event("done")
-                .data("")
-                .build();
+                .event("done").data(doneData).build();
+        StringBuilder contentBuf = new StringBuilder();
+        StringBuilder reasoningBuf = new StringBuilder();
 
-        return chatClient.prompt()
-                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId))
-                .user(message)
-                .stream()
-                .chatResponse()
+        return prompt.stream().chatResponse()
                 .flatMap(response -> {
                     Flux<ServerSentEvent<String>> events = Flux.empty();
                     for (Generation gen : response.getResults()) {
                         AssistantMessage output = gen.getOutput();
-
-                        String reasoning = extractReasoningContent(output);
+                        String reasoning = extractReasoning(output);
                         if (reasoning != null && !reasoning.isEmpty()) {
+                            reasoningBuf.append(reasoning);
                             events = events.concatWith(Mono.just(
                                     ServerSentEvent.<String>builder()
-                                            .event("thinking")
-                                            .data(reasoning)
-                                            .build()));
+                                            .event("thinking").data(reasoning).build()));
                         }
-
                         String content = output.getText();
                         if (content != null && !content.isEmpty()) {
+                            contentBuf.append(content);
                             events = events.concatWith(Mono.just(
                                     ServerSentEvent.<String>builder()
-                                            .event("content")
-                                            .data(content)
-                                            .build()));
+                                            .event("content").data(content).build()));
                         }
                     }
                     return events;
                 })
-                .concatWith(Mono.just(doneEvent));
+                .concatWith(Mono.just(doneEvent))
+                .doOnComplete(() -> {
+                    conversationService.saveAssistantMessage(
+                            aiMsgId, conversationId, contentBuf.toString());
+                    if (reasoningBuf.length() > 0) {
+                        conversationService.saveReasoningTrace(
+                                UUID.randomUUID().toString(), aiMsgId,
+                                conversationId, reasoningBuf.toString());
+                    }
+                });
     }
 
-    /**
-     * 从 AssistantMessage 中提取推理思考内容。
-     *
-     * 当前支持 DeepSeek R1 系列模型。接入其他推理模型时，
-     * 在此处追加对应的 instanceof 分支即可，无需修改 Controller。
-     *
-     * 此方法封装了模型特有的类型判断，对外暴露为普通的 AssistantMessage，
-     * 确保 Controller 层不依赖任何模型特有的实现类。
-     */
-    private String extractReasoningContent(AssistantMessage output) {
+    // ---- 私有方法 ----
+
+    /** 从知识库检索上下文 */
+    private RagResult retrieveKnowledgeBase(String message, boolean enableRag) {
+        if (!enableRag || documentService == null) {
+            return RagResult.EMPTY;
+        }
+        return documentService.retrieveContext(message);
+    }
+
+    /** 构建 RAG 系统提示词 */
+    private String buildSystemPrompt(String context) {
+        return """
+                以下是用户本地知识库中的文档内容。
+                如果文档中有相关信息，请基于文档内容回答，并在文中提及文档名。
+                如果文档信息不足，可以结合你的知识补充回答。
+
+                ## 本地知识库文档
+                %s
+                """.formatted(context);
+    }
+
+    /** 编码 SSE done 事件数据——检索到的文档名列表 */
+    private String buildDoneData(RagResult rag) {
+        if (rag.isEmpty()) {
+            return "";
+        }
+        return rag.traces().stream()
+                .map(t -> t.get("documentName") + "|" + ((String) t.get("contentSnippet"))
+                        .replace("\n", " ").replace("\r", " "))
+                .reduce((a, b) -> a + "\n" + b)
+                .orElse("");
+    }
+
+    /** 从 AssistantMessage 中提取 DeepSeek 推理内容 */
+    private String extractReasoning(AssistantMessage output) {
         if (output instanceof org.springframework.ai.deepseek.DeepSeekAssistantMessage deepMsg) {
             return deepMsg.getReasoningContent();
         }

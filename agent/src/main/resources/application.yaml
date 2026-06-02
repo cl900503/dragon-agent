@@ -9,6 +9,15 @@ spring:
   application:
     name: agent
 
+  # 响应式 multipart 文件上传配置
+  codec:
+    max-in-memory-size: 20MB
+  webflux:
+    multipart:
+      max-parts: 10
+      max-disk-usage-per-part: 20MB
+      max-headers-size: 8KB
+
   config:
     import:
       - optional:classpath:config/ai.properties
@@ -20,6 +29,16 @@ spring:
       chat:
         options:
           model: ${AI_MODEL}
+    # Milvus 向量存储（BGE-M3 embedding dim = 1024）
+    vectorstore:
+      milvus:
+        client:
+          host: ${MILVUS_HOST:localhost}
+          port: ${MILVUS_PORT:19530}
+          database: ${MILVUS_DATABASE:default}
+        embedding-dimension: 1024
+        collection-name: ${MILVUS_COLLECTION:vector_store}
+        initialize-schema: true
     chat:
       memory:
         repository:
@@ -32,6 +51,40 @@ app:
     allowed-origins: ${CORS_ORIGINS:http://localhost:5173}
   auth:
     token-secret: ${AUTH_TOKEN_SECRET:dragon-agent-default-secret-change-in-production}
+  # BGE-M3 Embedding 由 RagConfig 中的 TeiEmbeddingModel 直接调用
+  embedding:
+    tei:
+      base-url: ${TEI_BASE_URL:http://localhost:8081/v1}
+
+  # MinIO 对象存储
+  minio:
+    endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+    access-key: ${MINIO_ACCESS_KEY:minioadmin}
+    secret-key: ${MINIO_SECRET_KEY:minioadmin}
+    bucket: ${MINIO_BUCKET:dragon-agent}
+  # 文件上传限制
+  upload:
+    max-file-size: 20MB
+    allowed-mime-types:
+      - application/pdf
+      - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      - application/vnd.openxmlformats-officedocument.presentationml.presentation
+      - text/plain
+      - text/markdown
+      - text/x-java-source
+      - text/x-python
+      - text/x-c
+      - text/csv
+      - application/json
+  # RAG 检索参数
+  rag:
+    chunk-size: 512
+    chunk-overlap: 50
+    top-k: 5
+    # BGE-M3 语义 Embedding，分数范围 0.3-0.8
+    similarity-threshold: 0.2
+    vector-store-file: ${VECTOR_STORE_FILE:./data/vector-store.json}
 
 # Actuator 健康检查——仅暴露 health 端点
 management:

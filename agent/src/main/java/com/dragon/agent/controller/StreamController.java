@@ -48,7 +48,9 @@ public class StreamController {
                 .flatMapMany(username -> {
                     String cid = conversationService.resolveConversationId(
                             request.conversationId(), username);
-                    return aiService.stream(request.message(), cid)
+                    return aiService.stream(
+                            request.message(), cid, request.enableRag(),
+                            request.userMsgId(), request.aiMsgId())
                             .doOnComplete(() -> conversationService.updateConversationTitle(cid));
                 });
     }

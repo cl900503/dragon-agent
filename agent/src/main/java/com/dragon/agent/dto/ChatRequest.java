@@ -17,5 +17,19 @@ public record ChatRequest(
         @Size(max = 10000, message = "消息内容不能超过10000个字符")
         String message,
 
-        String conversationId
-) {}
+        String conversationId,
+
+        /** 是否启用 RAG 文档检索，默认 true */
+        Boolean enableRag,
+
+        /** 前端生成的用户消息 ID */
+        String userMsgId,
+
+        /** 前端生成的 AI 消息 ID */
+        String aiMsgId
+) {
+    /** 未传 enableRag 时默认启用 */
+    public Boolean enableRag() {
+        return enableRag != null ? enableRag : true;
+    }
+}

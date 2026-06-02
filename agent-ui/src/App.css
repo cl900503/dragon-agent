@@ -1,15 +1,12 @@
-/* ---- 整体布局：侧边栏 + 主区域 ---- */
+/* ---- 整体布局：ActivityBar + Sidebar + 主区域 ---- */
 .app-layout {
   display: flex;
   height: 100vh;
   overflow: hidden;
 }
-
 .app-layout > .app {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column;
   background: var(--bg);
 }
 
@@ -153,6 +150,46 @@
 .loading-text { color: var(--text-secondary); }
 
 .suspense-fallback { text-align: center; padding: 40px; color: var(--text-secondary); }
+
+/* --- 拖拽上传覆盖层 --- */
+.drag-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(79, 70, 229, 0.06);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.drag-overlay-content {
+  text-align: center;
+  padding: 48px 64px;
+  background: #fff;
+  border: 3px dashed var(--primary, #4f46e5);
+  border-radius: 16px;
+  pointer-events: none;
+}
+
+.drag-overlay-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+.drag-overlay-content p {
+  font-size: 18px;
+  color: var(--text, #1e293b);
+  margin: 0;
+  font-weight: 500;
+}
+
+/* --- 欢迎页上传提示 --- */
+.welcome-upload-hint {
+  margin-top: 10px !important;
+  font-size: 13px !important;
+  color: #94a3b8 !important;
+}
 
 /* --- 响应式 --- */
 @media (max-width: 640px) {

@@ -7,15 +7,30 @@
 
 /** 单条聊天消息 */
 export interface Message {
-  /** 消息唯一 ID（crypto.randomUUID()），用作 React key */
   id: string
-  /** 角色：user = 用户，assistant = AI */
   role: 'user' | 'assistant'
-  /** 正文内容，Markdown 格式 */
   content: string
-  /** DeepSeek R1 思考过程文本，流式累积 */
   reasoning: string
-  /** 是否正在流式生成思考内容（用于显示加载动画） */
   thinking: boolean
+  /** RAG 检索追溯（仅 USER 消息有值） */
+  retrievalTraces?: RetrievalTraceItem[]
+}
+
+export interface RetrievalTraceItem {
+  documentName: string
+  chunkIndex: number
+  score?: number
+  contentSnippet: string
+}
+
+/** 上传文档状态 */
+export interface UploadedDocument {
+  id: string
+  originalName: string
+  fileSize: number
+  mimeType: string
+  status: 'UPLOADING' | 'PARSING' | 'INDEXING' | 'READY' | 'FAILED'
+  chunkCount: number
+  createdAt: string
 }
 

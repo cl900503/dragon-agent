@@ -7,20 +7,26 @@ import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.ai.chat.memory.ChatMemory;
-import org.springframework.ai.chat.messages.Message;
-import org.springframework.ai.chat.messages.MessageType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.dragon.agent.entity.ConversationEntity;
+import com.dragon.agent.entity.MessageEntity;
+import com.dragon.agent.entity.ReasoningTrace;
+import com.dragon.agent.entity.RetrievalTrace;
 import com.dragon.agent.entity.UserEntity;
 import com.dragon.agent.repository.ConversationRepository;
+import com.dragon.agent.repository.MessageRepository;
+import com.dragon.agent.repository.ReasoningTraceRepository;
+import com.dragon.agent.repository.RetrievalTraceRepository;
+import com.dragon.agent.repository.ToolTraceRepository;
 import com.dragon.agent.repository.UserRepository;
 
 /**
- * 会话管理服务——会话元数据持久化到 MySQL，消息内容委托 ChatMemory（JdbcChatMemory）。
+ * 会话管理服务——ChatMemory + ReasoningTrace + RetrievalTrace + ToolTrace。
  *
- * 每个会话绑定到创建它的用户，通过 conversations 表的 user_id 字段实现隔离。
+ * ChatMemory 仅用于 Spring AI 对话上下文运行时管理。
+ * 消息和三种 Trace 使用自建表持久化。
  *
  * @author 陈龙
  * @since 2026-05-31
@@ -30,73 +36,137 @@ public class ConversationService {
 
     private final ChatMemory chatMemory;
     private final ConversationRepository conversationRepository;
+    private final MessageRepository messageRepository;
+    private final ReasoningTraceRepository reasoningTraceRepository;
+    private final RetrievalTraceRepository retrievalTraceRepository;
+    private final ToolTraceRepository toolTraceRepository;
     private final UserRepository userRepository;
 
     public ConversationService(ChatMemory chatMemory,
                                ConversationRepository conversationRepository,
+                               MessageRepository messageRepository,
+                               ReasoningTraceRepository reasoningTraceRepository,
+                               RetrievalTraceRepository retrievalTraceRepository,
+                               ToolTraceRepository toolTraceRepository,
                                UserRepository userRepository) {
         this.chatMemory = chatMemory;
         this.conversationRepository = conversationRepository;
+        this.messageRepository = messageRepository;
+        this.reasoningTraceRepository = reasoningTraceRepository;
+        this.retrievalTraceRepository = retrievalTraceRepository;
+        this.toolTraceRepository = toolTraceRepository;
         this.userRepository = userRepository;
     }
 
-    /**
-     * 解析会话 ID——为空时生成新 UUID 并保存到 MySQL。
-     *
-     * 已有会话则校验归属，非属主抛出 SecurityException。
-     */
+    // -- Conversation management --
+
     public String resolveConversationId(String conversationId, String username) {
         UserEntity user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new IllegalStateException("用户不存在: " + username));
-
         if (conversationId == null || conversationId.isBlank()) {
             String newId = UUID.randomUUID().toString();
-            ConversationEntity entity = new ConversationEntity(newId, user.getId(), "新对话");
-            conversationRepository.save(entity);
+            conversationRepository.save(new ConversationEntity(newId, user.getId(), "新对话"));
             return newId;
         }
-
-        // 已有会话：校验归属，不存在则创建归属记录（兼容历史数据）
         ConversationEntity existing = conversationRepository.findById(conversationId).orElse(null);
         if (existing == null) {
-            ConversationEntity entity = new ConversationEntity(conversationId, user.getId(), "新对话");
-            conversationRepository.save(entity);
+            conversationRepository.save(new ConversationEntity(conversationId, user.getId(), "新对话"));
         } else if (!existing.getUserId().equals(user.getId())) {
             throw new SecurityException("无权访问此会话");
         }
         return conversationId;
     }
 
-    /**
-     * 获取指定会话的全部历史消息。
-     */
-    public List<Message> getMessages(String conversationId) {
-        return chatMemory.get(conversationId);
+    // -- Messages (ChatMemory) --
+
+    /** 返回含 reasoning + retrieval trace 的完整消息历史 */
+    public List<Map<String, Object>> getMessages(String conversationId) {
+        List<MessageEntity> messages = messageRepository.findByConversationIdOrderByCreatedAtAsc(conversationId);
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (MessageEntity msg : messages) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", msg.getId());
+            item.put("messageType", msg.getRole());
+            item.put("text", msg.getContent());
+
+            // reasoning trace
+            if ("ASSISTANT".equals(msg.getRole())) {
+                reasoningTraceRepository.findByMessageId(msg.getId())
+                        .ifPresent(rt -> item.put("reasoning", rt.getContent()));
+            }
+
+            // retrieval traces
+            if ("USER".equals(msg.getRole())) {
+                List<RetrievalTrace> retrievals = retrievalTraceRepository.findByMessageId(msg.getId());
+                if (!retrievals.isEmpty()) {
+                    List<Map<String, Object>> rtList = new ArrayList<>();
+                    for (RetrievalTrace rt : retrievals) {
+                        Map<String, Object> r = new LinkedHashMap<>();
+                        r.put("documentName", rt.getDocumentName());
+                        r.put("chunkIndex", rt.getChunkIndex());
+                        r.put("contentSnippet", rt.getContentSnippet());
+                        if (rt.getScore() != null) r.put("score", rt.getScore());
+                        rtList.add(r);
+                    }
+                    item.put("retrievalTraces", rtList);
+                }
+            }
+
+            result.add(item);
+        }
+        return result;
     }
 
-    /**
-     * 删除指定会话——清除 ChatMemory 历史消息并删除 MySQL 中的会话记录。
-     */
+    public void saveUserMessage(String id, String conversationId, String content) {
+        messageRepository.save(new MessageEntity(id, conversationId, "USER", content));
+    }
+
+    public void saveAssistantMessage(String id, String conversationId, String content) {
+        messageRepository.save(new MessageEntity(id, conversationId, "ASSISTANT", content));
+    }
+
+    // -- Traces --
+
+    public void saveReasoningTrace(String id, String messageId, String conversationId, String content) {
+        reasoningTraceRepository.save(new ReasoningTrace(id, messageId, conversationId, content));
+    }
+
+    public void saveRetrievalTraces(String messageId, String conversationId,
+                                     List<Map<String, Object>> traces) {
+        for (Map<String, Object> t : traces) {
+            String tid = UUID.randomUUID().toString();
+            RetrievalTrace rt = new RetrievalTrace();
+            rt.setId(tid);
+            rt.setMessageId(messageId);
+            rt.setConversationId(conversationId);
+            rt.setDocumentName((String) t.get("documentName"));
+            rt.setChunkIndex((Integer) t.get("chunkIndex"));
+            rt.setScore((Double) t.get("score"));
+            rt.setContentSnippet((String) t.get("contentSnippet"));
+            retrievalTraceRepository.save(rt);
+        }
+    }
+
     @Transactional
     public void clearConversation(String conversationId, String username) {
         chatMemory.clear(conversationId);
+        retrievalTraceRepository.deleteByConversationId(conversationId);
+        reasoningTraceRepository.deleteByConversationId(conversationId);
+        toolTraceRepository.deleteByConversationId(conversationId);
+        messageRepository.deleteByConversationId(conversationId);
         UserEntity user = userRepository.findByUsername(username).orElse(null);
         if (user != null) {
             conversationRepository.deleteByIdAndUserId(conversationId, user.getId());
         }
     }
 
-    /**
-     * 列出指定用户的所有会话，按创建时间倒序排列。
-     */
+    // -- Listing --
+
     public List<Map<String, String>> listConversations(String username) {
         UserEntity user = userRepository.findByUsername(username).orElse(null);
-        if (user == null) {
-            return List.of();
-        }
+        if (user == null) return List.of();
         List<ConversationEntity> entities =
                 conversationRepository.findByUserIdOrderByCreatedAtDesc(user.getId());
-
         List<Map<String, String>> result = new ArrayList<>();
         for (ConversationEntity entity : entities) {
             Map<String, String> item = new LinkedHashMap<>();
@@ -107,18 +177,12 @@ public class ConversationService {
         return result;
     }
 
-    /**
-     * 校验会话是否属于指定用户。
-     */
     public boolean isOwner(String conversationId, String username) {
         UserEntity user = userRepository.findByUsername(username).orElse(null);
         if (user == null) return false;
         return conversationRepository.findByIdAndUserId(conversationId, user.getId()).isPresent();
     }
 
-    /**
-     * 更新会话标题——取第一条用户消息的前 30 个字符。
-     */
     public void updateConversationTitle(String conversationId) {
         String title = getConversationTitle(conversationId);
         conversationRepository.findById(conversationId).ifPresent(entity -> {
@@ -128,13 +192,10 @@ public class ConversationService {
     }
 
     private String getConversationTitle(String conversationId) {
-        List<Message> messages = chatMemory.get(conversationId);
-        if (messages == null) {
-            return "空会话";
-        }
-        for (Message msg : messages) {
-            if (msg.getMessageType() == MessageType.USER) {
-                String text = msg.getText();
+        List<MessageEntity> messages = messageRepository.findByConversationIdOrderByCreatedAtAsc(conversationId);
+        for (MessageEntity msg : messages) {
+            if ("USER".equals(msg.getRole())) {
+                String text = msg.getContent();
                 if (text != null && !text.isBlank()) {
                     return text.length() > 30 ? text.substring(0, 30) + "..." : text;
                 }
