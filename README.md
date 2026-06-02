@@ -1,88 +1,98 @@
 # Dragon Agent
 
-企业级 AI 对话平台，基于 **Spring Boot 4 + React 19 + DeepSeek**，支持流式对话（SSE）、推理过程展示、Markdown 实时渲染、用户认证和多会话隔离。
+企业级 RAG 智能对话平台，基于 Spring Boot 4 + React 19 + DeepSeek + BGE-M3，支持知识库管理、语义检索增强生成、多轮对话和推理过程可视化。
 
 ## 特性
 
-- **用户认证**：注册/登录/退出，Spring Security + BCrypt 密码加密，WebSession 会话管理
-- **数据持久化**：MySQL 存储用户、会话和消息，JdbcChatMemory 自动管理对话历史
-- **多用户隔离**：每个用户的会话独立存储，A 用户看不到 B 用户的会话
-- **流式对话**：基于 SSE 协议的逐 token 推送，实现打字机效果
-- **推理展示**：支持 DeepSeek R1 等推理模型的思考过程实时展示
-- **Markdown 渲染**：GFM、KaTeX 数学公式、Mermaid 图表（流程图、时序图、类图）
-- **代码高亮**：Shiki 语法高亮，支持一键复制
-- **多模型兼容**：标准 SSE 事件协议（thinking / content / done），接入其他模型无需改动前端
+- **RAG 知识库**：文档上传 → Tika 解析 → TokenTextSplitter 分块 → BGE-M3 向量化 → Milvus 语义检索
+- **流式对话**：SSE 逐 token 推送 + DeepSeek R1 推理过程实时展示
+- **Markdown 渲染**：GFM、KaTeX 数学公式、Mermaid 图表（流程图、时序图、类图）、Shiki 代码高亮
+- **四大 Trace 追溯**：ChatMemory / ReasoningTrace / RetrievalTrace / ToolTrace 完整审计链路
+- **用户认证**：注册/登录/退出，BCrypt 加密，WebSession + AUTH_TOKEN HMAC 双重会话管理
+- **企业级基础设施**：MinIO 对象存储 + Milvus 向量数据库 + MySQL 关系数据库 + Docker Compose 一键部署
+- **开发工具**：RAG 检索调试面板、Markdown 渲染测试、Ragas 评测脚本
 
 ## 技术栈
 
 | 层级 | 技术 | 版本 |
 |------|------|------|
 | 后端框架 | Spring Boot (WebFlux + Netty) | 4.0.6 |
-| AI 框架 | Spring AI DeepSeek Starter | 2.0.0-M8 |
-| 安全框架 | Spring Security (WebFlux) | — |
-| 持久化 | Spring Data JPA + MySQL + JdbcChatMemory | — |
-| 前端框架 | React + Vite | 19.x / 8.x |
-| 语言 | TypeScript | 6.x |
+| AI 引擎 | Spring AI + DeepSeek | 2.0.0-M8 |
+| Embedding | BGE-M3 via TEI | latest |
+| 向量数据库 | Milvus | 2.5.4 |
+| 对象存储 | MinIO (S3 兼容) | latest |
+| 关系数据库 | MySQL | 8.0 |
+| 文档解析 | Apache Tika | 3.1.0 |
+| 安全 | Spring Security (WebFlux) | 4.0.6 |
+| 前端框架 | React + Vite + TypeScript | 19 / 8 / 6 |
 | Markdown | react-markdown + Shiki + KaTeX + Mermaid | — |
 
 ## 快速开始
 
 ### 环境要求
 
-- JDK 21+、Node.js 20+、MySQL 8.x
+JDK 21+ · Node.js 20+ · Docker 24+ · 内存 16GB+
 
-### 启动 MySQL
+### 1. 配置 API Key
 
-```bash
-docker run -d --name mysql-dragon \
-  -e MYSQL_ROOT_PASSWORD=root \
-  -e MYSQL_DATABASE=dragon_agent \
-  -p 3306:3306 \
-  mysql:8.0
+编辑 `agent/src/main/resources/config/ai.properties`：
+
+```properties
+AI_API_KEY=sk-your-deepseek-api-key
+AI_BASE_URL=https://api.deepseek.com
+AI_MODEL=deepseek-v4-pro
 ```
 
-### 启动应用
+### 2. 启动基础设施
 
 ```bash
-# 1. 配置 API Key
-cp agent/src/main/resources/config/ai.properties.example \
-   agent/src/main/resources/config/ai.properties
-# 编辑 ai.properties 填入 DeepSeek API Key
+cd dragon-agent
+docker compose up -d
+```
 
-# 2. 启动后端（默认 :8080，dev profile）
+启动 MySQL、etcd、Milvus、MinIO、TEI (BGE-M3)。首次需下载 BGE-M3 模型 (~2.2GB)。
+
+### 3. 启动应用
+
+```bash
+# 后端 (dev profile，自动建表)
 cd agent && ./mvnw spring-boot:run
 
-# 3. 启动前端（默认 :5173）
+# 前端
 cd agent-ui && npm install && npm run dev
 ```
 
-浏览器打开 `http://localhost:5173`，注册账号后即可使用。
+访问 `http://localhost:5173`。
 
 ## 项目结构
 
 ```
 dragon-agent/
-├── agent/                          # 后端 Spring Boot
+├── docker-compose.yml          # 基础设施编排
+├── USAGE.md                    # 详细使用文档
+├── eval/                       # Ragas 评测脚本
+├── agent/                      # Spring Boot 后端
 │   └── src/main/java/com/dragon/agent/
-│       ├── config/                 # CORS、Security 配置
-│       ├── controller/             # RESTful 接口层
-│       ├── dto/                    # 数据传输对象
-│       ├── entity/                 # JPA 实体
-│       ├── exception/              # 异常定义和全局处理
-│       ├── repository/             # JPA Repository
-│       ├── service/                # 业务逻辑层
-│       └── support/                # 工具组件
-├── agent-ui/                       # 前端 React
-│   └── src/
-│       ├── hooks/                  # 自定义 Hook（useAuth、useConversation）
-│       └── components/             # UI 组件（ChatInput、CodeBlock、ChevronIcon 等）
-├── USAGE.md                        # 详细使用文档
-└── LICENSE                         # Apache 2.0
+│       ├── config/             # Security, CORS, MinIO, RAG
+│       ├── controller/         # Auth, Chat, Stream, Conversation, Document
+│       ├── dto/                # 数据传输对象
+│       ├── entity/             # JPA 实体 (含四大 Trace)
+│       ├── repository/         # JPA Repository
+│       ├── service/            # AiService, DocumentService, ChunkingService
+│       │   ├── storage/        # MinIO 文件服务
+│       │   └── parser/         # Tika 文档解析
+│       └── support/            # SecurityHelper
+└── agent-ui/                   # React 前端
+    └── src/
+        ├── api.ts / types.ts
+        ├── hooks/              # useAuth, useConversation
+        └── components/         # ActivityBar, Sidebar, ChatInput, MessageBubble,
+                                # KnowledgeBase, RagTest, MarkdownTest, etc.
 ```
 
 ## 文档
 
-详细的 API 接口文档、SSE 事件协议、环境变量配置、构建部署说明请参见 [USAGE.md](./USAGE.md)。
+详细的 API 接口、SSE 协议、环境变量、数据库表结构、RAG 评测方案请参见 [USAGE.md](./USAGE.md)。
 
 ## License
 
