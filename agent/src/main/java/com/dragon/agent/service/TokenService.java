@@ -13,8 +13,8 @@ import org.springframework.stereotype.Service;
 /**
  * 认证 Token 服务——HMAC-SHA256 签名，用于会话恢复。
  *
- * 当 WebSession 丢失（如后端重启）时，通过验证浏览器携带的 AUTH_TOKEN cookie
- * 自动重建 SecurityContext，用户无需重新登录。
+ * 当 WebSession 丢失（如后端重启）时，通过验证浏览器携带的 AUTH_TOKEN cookie 自动重建
+ * SecurityContext，用户无需重新登录。
  *
  * Token 格式: Base64(username + ":" + HMAC-SHA256(username, secret))
  *
@@ -36,20 +36,21 @@ public class TokenService {
     /**
      * 生成签名 Token。
      *
-     * @param username 用户名
+     * @param username
+     *            用户名
      * @return Base64 编码的 token 字符串
      */
     public String generateToken(String username) {
         String signature = hmac(username, secret);
         String payload = username + SEPARATOR + signature;
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(
-                payload.getBytes(StandardCharsets.UTF_8));
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(payload.getBytes(StandardCharsets.UTF_8));
     }
 
     /**
      * 验证 Token 并提取用户名。
      *
-     * @param token Base64 编码的 token 字符串
+     * @param token
+     *            Base64 编码的 token 字符串
      * @return 验证通过时返回用户名，否则返回空
      */
     public Optional<String> validateToken(String token) {
@@ -78,8 +79,7 @@ public class TokenService {
     private String hmac(String data, String key) {
         try {
             Mac mac = Mac.getInstance(HMAC_ALGORITHM);
-            SecretKeySpec keySpec = new SecretKeySpec(
-                    key.getBytes(StandardCharsets.UTF_8), HMAC_ALGORITHM);
+            SecretKeySpec keySpec = new SecretKeySpec(key.getBytes(StandardCharsets.UTF_8), HMAC_ALGORITHM);
             mac.init(keySpec);
             byte[] hash = mac.doFinal(data.getBytes(StandardCharsets.UTF_8));
             StringBuilder hex = new StringBuilder(hash.length * 2);

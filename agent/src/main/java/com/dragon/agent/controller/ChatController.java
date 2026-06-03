@@ -37,17 +37,13 @@ public class ChatController {
 
     @PostMapping("/chat")
     public Mono<ResponseEntity<String>> chat(@Valid @RequestBody ChatRequest request) {
-        return securityHelper.currentUsername()
-                .flatMap(username -> {
-                    String cid = conversationService.resolveConversationId(request.conversationId(), username);
-                    return Mono.fromCallable(() -> aiService.chat(
-                                    request.message(), cid, request.enableRag(),
-                                    request.userMsgId(), request.aiMsgId()))
-                            .subscribeOn(Schedulers.boundedElastic())
-                            .map(content -> {
-                                conversationService.updateConversationTitle(cid);
-                                return ResponseEntity.ok().header("X-Conversation-Id", cid).body(content);
-                            });
-                });
+        return securityHelper.currentUsername().flatMap(username -> {
+            String cid = conversationService.resolveConversationId(request.conversationId(), username);
+            return Mono.fromCallable(() -> aiService.chat(request.message(), cid, request.enableRag(),
+                    request.userMsgId(), request.aiMsgId())).subscribeOn(Schedulers.boundedElastic()).map(content -> {
+                        conversationService.updateConversationTitle(cid);
+                        return ResponseEntity.ok().header("X-Conversation-Id", cid).body(content);
+                    });
+        });
     }
 }

@@ -8,5 +8,6 @@ import com.dragon.agent.entity.MessageEntity;
 
 public interface MessageRepository extends JpaRepository<MessageEntity, String> {
     List<MessageEntity> findByConversationIdOrderByCreatedAtAsc(String conversationId);
+
     void deleteByConversationId(String conversationId);
 }

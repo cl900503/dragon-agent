@@ -52,39 +52,34 @@ public class DocumentController {
     private SecurityHelper securityHelper;
 
     @PostMapping("/upload")
-    public Mono<ResponseEntity<Object>> upload(
-            @RequestPart("file") FilePart file,
+    public Mono<ResponseEntity<Object>> upload(@RequestPart("file") FilePart file,
             @RequestParam(name = "conversationId", required = false) String conversationId) {
         if (documentService == null)
-            return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                    .body(Map.of("error", "文档服务未就绪")));
-        return securityHelper.currentUsername()
-                .flatMap(username -> {
-                    String originalName = file.filename();
-                    String mimeType = file.headers().getContentType() != null
-                            ? file.headers().getContentType().toString()
-                            : "application/octet-stream";
-                    return DataBufferUtils.join(file.content())
-                            .flatMap(dataBuffer -> {
-                                byte[] bytes = new byte[dataBuffer.readableByteCount()];
-                                dataBuffer.read(bytes);
-                                DataBufferUtils.release(dataBuffer);
-                                if (bytes.length > MAX_FILE_SIZE)
-                                    return Mono.just(ResponseEntity.badRequest()
-                                            .body(Map.of("error", "文件大小超过限制（最大 20MB）")));
-                                return Mono.fromCallable(() -> documentService.upload(
-                                                new ByteArrayInputStream(bytes), originalName,
-                                                (long) bytes.length, mimeType, conversationId, username))
-                                        .subscribeOn(Schedulers.boundedElastic())
-                                        .map(r -> ResponseEntity.status(201).body((Object) r));
-                            });
-                });
+            return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(Map.of("error", "文档服务未就绪")));
+        return securityHelper.currentUsername().flatMap(username -> {
+            String originalName = file.filename();
+            String mimeType = file.headers().getContentType() != null
+                    ? file.headers().getContentType().toString()
+                    : "application/octet-stream";
+            return DataBufferUtils.join(file.content()).flatMap(dataBuffer -> {
+                byte[] bytes = new byte[dataBuffer.readableByteCount()];
+                dataBuffer.read(bytes);
+                DataBufferUtils.release(dataBuffer);
+                if (bytes.length > MAX_FILE_SIZE)
+                    return Mono.just(ResponseEntity.badRequest().body(Map.of("error", "文件大小超过限制（最大 20MB）")));
+                return Mono
+                        .fromCallable(() -> documentService.upload(new ByteArrayInputStream(bytes), originalName,
+                                (long) bytes.length, mimeType, conversationId, username))
+                        .subscribeOn(Schedulers.boundedElastic()).map(r -> ResponseEntity.status(201).body((Object) r));
+            });
+        });
     }
 
     @GetMapping
     public Mono<ResponseEntity<List<DocumentResponse>>> list(
             @RequestParam(name = "conversationId", required = false) String conversationId) {
-        if (documentService == null) return Mono.just(ResponseEntity.ok(List.of()));
+        if (documentService == null)
+            return Mono.just(ResponseEntity.ok(List.of()));
         return securityHelper.currentUsername()
                 .map(username -> ResponseEntity.ok(documentService.listDocuments(username, conversationId)));
     }
@@ -93,17 +88,19 @@ public class DocumentController {
     public Mono<ResponseEntity<Map<String, Object>>> delete(@PathVariable String id) {
         if (documentService == null) {
             Map<String, Object> err = new LinkedHashMap<>();
-            err.put("id", id); err.put("deleted", false); err.put("error", "文档服务未就绪");
+            err.put("id", id);
+            err.put("deleted", false);
+            err.put("error", "文档服务未就绪");
             return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(err));
         }
-        return securityHelper.currentUsername()
-                .flatMap(username -> Mono.fromCallable(() -> {
-                    documentService.deleteDocument(id, username);
-                    Map<String, Object> result = new LinkedHashMap<>();
-                    result.put("id", id); result.put("deleted", true);
-                    result.put("timestamp", Instant.now().toString());
-                    return ResponseEntity.ok(result);
-                }).subscribeOn(Schedulers.boundedElastic()));
+        return securityHelper.currentUsername().flatMap(username -> Mono.fromCallable(() -> {
+            documentService.deleteDocument(id, username);
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("id", id);
+            result.put("deleted", true);
+            result.put("timestamp", Instant.now().toString());
+            return ResponseEntity.ok(result);
+        }).subscribeOn(Schedulers.boundedElastic()));
     }
 
     @PostMapping("/{id}/retry")
@@ -113,47 +110,49 @@ public class DocumentController {
             err.put("error", "文档服务未就绪");
             return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(err));
         }
-        return securityHelper.currentUsername()
-                .flatMap(username -> Mono.fromCallable(() -> {
-                    documentService.retryDocument(id, username);
-                    Map<String, Object> result = new LinkedHashMap<>();
-                    result.put("id", id); result.put("status", "RETRYING");
-                    return ResponseEntity.ok(result);
-                }).subscribeOn(Schedulers.boundedElastic()));
+        return securityHelper.currentUsername().flatMap(username -> Mono.fromCallable(() -> {
+            documentService.retryDocument(id, username);
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("id", id);
+            result.put("status", "RETRYING");
+            return ResponseEntity.ok(result);
+        }).subscribeOn(Schedulers.boundedElastic()));
     }
 
     @PostMapping("/test-retrieval")
     public Mono<ResponseEntity<Map<String, Object>>> testRetrieval(@RequestBody Map<String, String> body) {
         if (documentService == null)
-            return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                    .body(Map.of("error", "文档服务未就绪")));
+            return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(Map.of("error", "文档服务未就绪")));
         String query = body.getOrDefault("query", "");
-        if (query.isBlank()) return Mono.just(ResponseEntity.badRequest().body(Map.of("error", "query 不能为空")));
+        if (query.isBlank())
+            return Mono.just(ResponseEntity.badRequest().body(Map.of("error", "query 不能为空")));
         return Mono.fromCallable(() -> {
             var result = documentService.retrieveContext(query);
             Map<String, Object> response = new LinkedHashMap<>();
             response.put("query", query);
             response.put("hit", !result.isEmpty());
             response.put("traces", result.traces());
-            response.put("context", result.context().isEmpty() ? null
-                    : result.context().substring(0, Math.min(500, result.context().length())));
+            response.put("context",
+                    result.context().isEmpty()
+                            ? null
+                            : result.context().substring(0, Math.min(500, result.context().length())));
             return ResponseEntity.ok(response);
         }).subscribeOn(Schedulers.boundedElastic());
     }
 
     @GetMapping("/{id}/download")
     public Mono<ResponseEntity<InputStreamResource>> download(@PathVariable String id) {
-        if (documentService == null) return Mono.just(ResponseEntity.notFound().build());
-        return securityHelper.currentUsername()
-                .flatMap(username -> Mono.fromCallable(() -> {
-                    DocumentEntity entity = documentService.getDocumentEntity(id, username);
-                    InputStream stream = documentService.getFileStream(entity.getStoredPath());
-                    InputStreamResource resource = new InputStreamResource(stream);
-                    String contentType = entity.getMimeType() != null ? entity.getMimeType() : "application/octet-stream";
-                    return ResponseEntity.ok()
-                            .header(HttpHeaders.CONTENT_DISPOSITION,
-                                    "attachment; filename=\"" + entity.getOriginalName() + "\"")
-                            .contentType(MediaType.parseMediaType(contentType)).body(resource);
-                }).subscribeOn(Schedulers.boundedElastic()));
+        if (documentService == null)
+            return Mono.just(ResponseEntity.notFound().build());
+        return securityHelper.currentUsername().flatMap(username -> Mono.fromCallable(() -> {
+            DocumentEntity entity = documentService.getDocumentEntity(id, username);
+            InputStream stream = documentService.getFileStream(entity.getStoredPath());
+            InputStreamResource resource = new InputStreamResource(stream);
+            String contentType = entity.getMimeType() != null ? entity.getMimeType() : "application/octet-stream";
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION,
+                            "attachment; filename=\"" + entity.getOriginalName() + "\"")
+                    .contentType(MediaType.parseMediaType(contentType)).body(resource);
+        }).subscribeOn(Schedulers.boundedElastic()));
     }
 }

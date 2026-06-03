@@ -48,13 +48,35 @@ public class ConversationEntity {
         this.title = title;
     }
 
-    public String getId() { return id; }
-    public Long getUserId() { return userId; }
-    public String getTitle() { return title; }
-    public Instant getCreatedAt() { return createdAt; }
+    public String getId() {
+        return id;
+    }
 
-    public void setId(String id) { this.id = id; }
-    public void setUserId(Long userId) { this.userId = userId; }
-    public void setTitle(String title) { this.title = title; }
-    public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
+    public Long getUserId() {
+        return userId;
+    }
+
+    public String getTitle() {
+        return title;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setId(String id) {
+        this.id = id;
+    }
+
+    public void setUserId(Long userId) {
+        this.userId = userId;
+    }
+
+    public void setTitle(String title) {
+        this.title = title;
+    }
+
+    public void setCreatedAt(Instant createdAt) {
+        this.createdAt = createdAt;
+    }
 }

@@ -23,7 +23,7 @@ public class ReasoningTrace {
     private String id;
 
     @Column(name = "message_id", nullable = false, length = 36)
-    private String messageId;  // FK → chat_messages.id (ASSISTANT)
+    private String messageId; // FK → chat_messages.id (ASSISTANT)
 
     @Column(name = "conversation_id", nullable = false, length = 36)
     private String conversationId;
@@ -36,7 +36,8 @@ public class ReasoningTrace {
 
     @PrePersist
     void prePersist() {
-        if (createdAt == null) createdAt = Instant.now();
+        if (createdAt == null)
+            createdAt = Instant.now();
     }
 
     public ReasoningTrace() {}
@@ -48,14 +49,43 @@ public class ReasoningTrace {
         this.content = content;
     }
 
-    public String getId() { return id; }
-    public void setId(String id) { this.id = id; }
-    public String getMessageId() { return messageId; }
-    public void setMessageId(String messageId) { this.messageId = messageId; }
-    public String getConversationId() { return conversationId; }
-    public void setConversationId(String conversationId) { this.conversationId = conversationId; }
-    public String getContent() { return content; }
-    public void setContent(String content) { this.content = content; }
-    public Instant getCreatedAt() { return createdAt; }
-    public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
+    public String getId() {
+        return id;
+    }
+
+    public void setId(String id) {
+        this.id = id;
+    }
+
+    public String getMessageId() {
+        return messageId;
+    }
+
+    public void setMessageId(String messageId) {
+        this.messageId = messageId;
+    }
+
+    public String getConversationId() {
+        return conversationId;
+    }
+
+    public void setConversationId(String conversationId) {
+        this.conversationId = conversationId;
+    }
+
+    public String getContent() {
+        return content;
+    }
+
+    public void setContent(String content) {
+        this.content = content;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(Instant createdAt) {
+        this.createdAt = createdAt;
+    }
 }

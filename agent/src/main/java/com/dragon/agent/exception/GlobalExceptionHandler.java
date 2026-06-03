@@ -29,12 +29,9 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(WebExchangeBindException.class)
     public ResponseEntity<ErrorResponse> handleValidation(WebExchangeBindException ex) {
-        String msg = ex.getFieldErrors().stream()
-                .map(e -> e.getField() + ": " + e.getDefaultMessage())
-                .reduce((a, b) -> a + "; " + b)
-                .orElse("参数校验失败");
-        return ResponseEntity.badRequest()
-                .body(ErrorResponse.of(400, "Bad Request", msg));
+        String msg = ex.getFieldErrors().stream().map(e -> e.getField() + ": " + e.getDefaultMessage())
+                .reduce((a, b) -> a + "; " + b).orElse("参数校验失败");
+        return ResponseEntity.badRequest().body(ErrorResponse.of(400, "Bad Request", msg));
     }
 
     /**
@@ -42,23 +39,20 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(UsernameAlreadyExistsException.class)
     public ResponseEntity<ErrorResponse> handleConflict(UsernameAlreadyExistsException ex) {
-        return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(ErrorResponse.of(409, "Conflict", ex.getMessage()));
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(ErrorResponse.of(409, "Conflict", ex.getMessage()));
     }
 
     /**
      * 认证失败——BadCredentialsException 等。
      */
     @ExceptionHandler(org.springframework.security.core.AuthenticationException.class)
-    public ResponseEntity<ErrorResponse> handleAuth(
-            org.springframework.security.core.AuthenticationException ex) {
+    public ResponseEntity<ErrorResponse> handleAuth(org.springframework.security.core.AuthenticationException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(ErrorResponse.of(401, "Unauthorized", ex.getMessage()));
     }
 
     /**
-     * 兜底处理——捕获所有未被上层精确匹配的异常。
-     * 记录完整堆栈到日志，对外只返回模糊提示，不泄漏内部细节。
+     * 兜底处理——捕获所有未被上层精确匹配的异常。 记录完整堆栈到日志，对外只返回模糊提示，不泄漏内部细节。
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneral(Exception ex) {

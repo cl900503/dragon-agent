@@ -37,12 +37,10 @@ public class StreamController {
 
     @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<String>> stream(@Valid @RequestBody ChatRequest request) {
-        return securityHelper.currentUsername()
-                .flatMapMany(username -> {
-                    String cid = conversationService.resolveConversationId(request.conversationId(), username);
-                    return aiService.stream(request.message(), cid, request.enableRag(),
-                                    request.userMsgId(), request.aiMsgId())
-                            .doOnComplete(() -> conversationService.updateConversationTitle(cid));
-                });
+        return securityHelper.currentUsername().flatMapMany(username -> {
+            String cid = conversationService.resolveConversationId(request.conversationId(), username);
+            return aiService.stream(request.message(), cid, request.enableRag(), request.userMsgId(), request.aiMsgId())
+                    .doOnComplete(() -> conversationService.updateConversationTitle(cid));
+        });
     }
 }

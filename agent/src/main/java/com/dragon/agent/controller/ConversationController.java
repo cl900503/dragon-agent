@@ -41,27 +41,25 @@ public class ConversationController {
 
     @GetMapping("/{id}")
     public Mono<ResponseEntity<Map<String, Object>>> getConversation(@PathVariable String id) {
-        return securityHelper.currentUsername()
-                .flatMap(username -> {
-                    if (!conversationService.isOwner(id, username)) {
-                        return Mono.just(ResponseEntity.status(403).body(Map.of("error", "无权访问此会话")));
-                    }
-                    List<Map<String, Object>> messages = conversationService.getMessages(id);
-                    return Mono.just(ResponseEntity.ok(Map.of(
-                            "conversationId", id, "messages", messages, "count", messages.size())));
-                });
+        return securityHelper.currentUsername().flatMap(username -> {
+            if (!conversationService.isOwner(id, username)) {
+                return Mono.just(ResponseEntity.status(403).body(Map.of("error", "无权访问此会话")));
+            }
+            List<Map<String, Object>> messages = conversationService.getMessages(id);
+            return Mono.just(
+                    ResponseEntity.ok(Map.of("conversationId", id, "messages", messages, "count", messages.size())));
+        });
     }
 
     @DeleteMapping("/{id}")
     public Mono<ResponseEntity<Map<String, Object>>> clearConversation(@PathVariable String id) {
-        return securityHelper.currentUsername()
-                .flatMap(username -> {
-                    if (!conversationService.isOwner(id, username)) {
-                        return Mono.just(ResponseEntity.status(403).body(Map.of("error", "无权操作此会话")));
-                    }
-                    conversationService.clearConversation(id, username);
-                    return Mono.just(ResponseEntity.ok(Map.of(
-                            "conversationId", id, "cleared", true, "timestamp", Instant.now())));
-                });
+        return securityHelper.currentUsername().flatMap(username -> {
+            if (!conversationService.isOwner(id, username)) {
+                return Mono.just(ResponseEntity.status(403).body(Map.of("error", "无权操作此会话")));
+            }
+            conversationService.clearConversation(id, username);
+            return Mono
+                    .just(ResponseEntity.ok(Map.of("conversationId", id, "cleared", true, "timestamp", Instant.now())));
+        });
     }
 }

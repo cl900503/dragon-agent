@@ -8,5 +8,6 @@ import com.dragon.agent.entity.RetrievalTrace;
 
 public interface RetrievalTraceRepository extends JpaRepository<RetrievalTrace, String> {
     List<RetrievalTrace> findByMessageId(String messageId);
+
     void deleteByConversationId(String conversationId);
 }

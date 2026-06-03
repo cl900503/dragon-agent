@@ -25,9 +25,7 @@ public class ChunkingService {
     private int chunkSize;
 
     public List<Document> chunk(List<Document> documents) {
-        TokenTextSplitter splitter = TokenTextSplitter.builder()
-                .withChunkSize(chunkSize)
-                .withMinChunkSizeChars(50)
+        TokenTextSplitter splitter = TokenTextSplitter.builder().withChunkSize(chunkSize).withMinChunkSizeChars(50)
                 .build();
 
         List<Document> chunks = new ArrayList<>();

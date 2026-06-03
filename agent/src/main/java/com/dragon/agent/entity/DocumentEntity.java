@@ -20,12 +20,10 @@ import jakarta.persistence.Table;
  * @since 2026-06-01
  */
 @Entity
-@Table(name = "documents", indexes = {
-    @Index(name = "idx_doc_user_id", columnList = "user_id"),
-    @Index(name = "idx_doc_conversation_id", columnList = "conversation_id"),
-    @Index(name = "idx_doc_status", columnList = "status"),
-    @Index(name = "idx_doc_user_status", columnList = "user_id,status")
-})
+@Table(name = "documents", indexes = {@Index(name = "idx_doc_user_id", columnList = "user_id"),
+        @Index(name = "idx_doc_conversation_id", columnList = "conversation_id"),
+        @Index(name = "idx_doc_status", columnList = "status"),
+        @Index(name = "idx_doc_user_status", columnList = "user_id,status")})
 public class DocumentEntity {
 
     @Id
@@ -72,8 +70,8 @@ public class DocumentEntity {
 
     public DocumentEntity() {}
 
-    public DocumentEntity(String id, Long userId, String conversationId,
-                          String originalName, String storedPath, Long fileSize, String mimeType) {
+    public DocumentEntity(String id, Long userId, String conversationId, String originalName, String storedPath,
+            Long fileSize, String mimeType) {
         this.id = id;
         this.userId = userId;
         this.conversationId = conversationId;
@@ -86,36 +84,91 @@ public class DocumentEntity {
 
     // -- Getters / Setters --
 
-    public String getId() { return id; }
-    public void setId(String id) { this.id = id; }
+    public String getId() {
+        return id;
+    }
 
-    public Long getUserId() { return userId; }
-    public void setUserId(Long userId) { this.userId = userId; }
+    public void setId(String id) {
+        this.id = id;
+    }
 
-    public String getConversationId() { return conversationId; }
-    public void setConversationId(String conversationId) { this.conversationId = conversationId; }
+    public Long getUserId() {
+        return userId;
+    }
 
-    public String getOriginalName() { return originalName; }
-    public void setOriginalName(String originalName) { this.originalName = originalName; }
+    public void setUserId(Long userId) {
+        this.userId = userId;
+    }
 
-    public String getStoredPath() { return storedPath; }
-    public void setStoredPath(String storedPath) { this.storedPath = storedPath; }
+    public String getConversationId() {
+        return conversationId;
+    }
 
-    public Long getFileSize() { return fileSize; }
-    public void setFileSize(Long fileSize) { this.fileSize = fileSize; }
+    public void setConversationId(String conversationId) {
+        this.conversationId = conversationId;
+    }
 
-    public String getMimeType() { return mimeType; }
-    public void setMimeType(String mimeType) { this.mimeType = mimeType; }
+    public String getOriginalName() {
+        return originalName;
+    }
 
-    public Integer getChunkCount() { return chunkCount; }
-    public void setChunkCount(Integer chunkCount) { this.chunkCount = chunkCount; }
+    public void setOriginalName(String originalName) {
+        this.originalName = originalName;
+    }
 
-    public DocumentStatus getStatus() { return status; }
-    public void setStatus(DocumentStatus status) { this.status = status; }
+    public String getStoredPath() {
+        return storedPath;
+    }
 
-    public String getErrorMessage() { return errorMessage; }
-    public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
+    public void setStoredPath(String storedPath) {
+        this.storedPath = storedPath;
+    }
 
-    public Instant getCreatedAt() { return createdAt; }
-    public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
+    public Long getFileSize() {
+        return fileSize;
+    }
+
+    public void setFileSize(Long fileSize) {
+        this.fileSize = fileSize;
+    }
+
+    public String getMimeType() {
+        return mimeType;
+    }
+
+    public void setMimeType(String mimeType) {
+        this.mimeType = mimeType;
+    }
+
+    public Integer getChunkCount() {
+        return chunkCount;
+    }
+
+    public void setChunkCount(Integer chunkCount) {
+        this.chunkCount = chunkCount;
+    }
+
+    public DocumentStatus getStatus() {
+        return status;
+    }
+
+    public void setStatus(DocumentStatus status) {
+        this.status = status;
+    }
+
+    public String getErrorMessage() {
+        return errorMessage;
+    }
+
+    public void setErrorMessage(String errorMessage) {
+        this.errorMessage = errorMessage;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(Instant createdAt) {
+        this.createdAt = createdAt;
+    }
 }

@@ -41,9 +41,8 @@ public class MinioFileStorageService implements FileStorageService {
         String objectKey = "documents/" + datePath + "/" + uniqueName;
 
         try {
-            minioClient.putObject(PutObjectArgs.builder()
-                    .bucket(bucket).object(objectKey)
-                    .stream(data, fileSize, -1).contentType(contentType).build());
+            minioClient.putObject(PutObjectArgs.builder().bucket(bucket).object(objectKey).stream(data, fileSize, -1)
+                    .contentType(contentType).build());
             log.info("File stored: {} ({} bytes)", objectKey, fileSize);
             return objectKey;
         } catch (Exception e) {

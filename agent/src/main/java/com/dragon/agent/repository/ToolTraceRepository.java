@@ -8,5 +8,6 @@ import com.dragon.agent.entity.ToolTrace;
 
 public interface ToolTraceRepository extends JpaRepository<ToolTrace, String> {
     List<ToolTrace> findByMessageId(String messageId);
+
     void deleteByConversationId(String conversationId);
 }

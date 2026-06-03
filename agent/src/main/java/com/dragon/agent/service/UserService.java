@@ -31,10 +31,13 @@ public class UserService {
     /**
      * 注册新用户，密码经 BCrypt 哈希后存入 MySQL。
      *
-     * @param username    用户名
-     * @param rawPassword 明文密码
+     * @param username
+     *            用户名
+     * @param rawPassword
+     *            明文密码
      * @return 新创建的 UserDetails
-     * @throws UsernameAlreadyExistsException 用户名已存在
+     * @throws UsernameAlreadyExistsException
+     *             用户名已存在
      */
     public UserDetails register(String username, String rawPassword) {
         if (userRepository.existsByUsername(username)) {
@@ -42,11 +45,7 @@ public class UserService {
         }
         UserEntity entity = new UserEntity(username, encoder.encode(rawPassword));
         userRepository.save(entity);
-        return User.builder()
-                .username(username)
-                .password(entity.getPasswordHash())
-                .authorities("ROLE_USER")
-                .build();
+        return User.builder().username(username).password(entity.getPasswordHash()).authorities("ROLE_USER").build();
     }
 
     /**
@@ -55,13 +54,8 @@ public class UserService {
      * @return UserDetails，未找到返回 null
      */
     public UserDetails findByUsername(String username) {
-        return userRepository.findByUsername(username)
-                .map(entity -> User.builder()
-                        .username(entity.getUsername())
-                        .password(entity.getPasswordHash())
-                        .authorities("ROLE_USER")
-                        .build())
-                .orElse(null);
+        return userRepository.findByUsername(username).map(entity -> User.builder().username(entity.getUsername())
+                .password(entity.getPasswordHash()).authorities("ROLE_USER").build()).orElse(null);
     }
 
     /**

@@ -22,7 +22,6 @@ public class SecurityHelper {
      * @return 包含用户名的 Mono，未认证时 Mono 为空
      */
     public Mono<String> currentUsername() {
-        return ReactiveSecurityContextHolder.getContext()
-                .map(ctx -> ctx.getAuthentication().getName());
+        return ReactiveSecurityContextHolder.getContext().map(ctx -> ctx.getAuthentication().getName());
     }
 }

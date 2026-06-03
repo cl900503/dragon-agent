@@ -48,15 +48,19 @@ public class AiService {
     /**
      * 同步对话——保存消息、检索知识库、调用 LLM、保存回复。
      *
-     * @param message        用户消息
-     * @param conversationId 会话 ID
-     * @param enableRag      是否启用知识库检索
-     * @param userMsgId      前端生成的用户消息 ID
-     * @param aiMsgId        前端生成的 AI 消息 ID
+     * @param message
+     *            用户消息
+     * @param conversationId
+     *            会话 ID
+     * @param enableRag
+     *            是否启用知识库检索
+     * @param userMsgId
+     *            前端生成的用户消息 ID
+     * @param aiMsgId
+     *            前端生成的 AI 消息 ID
      * @return AI 完整回复
      */
-    public String chat(String message, String conversationId, boolean enableRag,
-                       String userMsgId, String aiMsgId) {
+    public String chat(String message, String conversationId, boolean enableRag, String userMsgId, String aiMsgId) {
         conversationService.saveUserMessage(userMsgId, conversationId, message);
 
         RagResult rag = retrieveKnowledgeBase(message, enableRag);
@@ -64,12 +68,9 @@ public class AiService {
             conversationService.saveRetrievalTraces(userMsgId, conversationId, rag.traces());
         }
 
-        ChatClient client = chatClientBuilder
-                .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
+        ChatClient client = chatClientBuilder.defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
                 .build();
-        var prompt = client.prompt()
-                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId))
-                .user(message);
+        var prompt = client.prompt().advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId)).user(message);
         if (!rag.isEmpty()) {
             prompt = prompt.system(buildSystemPrompt(rag.context()));
         }
@@ -82,16 +83,20 @@ public class AiService {
     /**
      * SSE 流式对话——逐 token 推送，流结束后持久化消息和推理过程。
      *
-     * @param message        用户消息
-     * @param conversationId 会话 ID
-     * @param enableRag      是否启用知识库检索
-     * @param userMsgId      用户消息 ID
-     * @param aiMsgId        AI 消息 ID
+     * @param message
+     *            用户消息
+     * @param conversationId
+     *            会话 ID
+     * @param enableRag
+     *            是否启用知识库检索
+     * @param userMsgId
+     *            用户消息 ID
+     * @param aiMsgId
+     *            AI 消息 ID
      * @return SSE 事件流（thinking / content / done）
      */
-    public Flux<ServerSentEvent<String>> stream(String message, String conversationId,
-                                                 boolean enableRag,
-                                                 String userMsgId, String aiMsgId) {
+    public Flux<ServerSentEvent<String>> stream(String message, String conversationId, boolean enableRag,
+            String userMsgId, String aiMsgId) {
         conversationService.saveUserMessage(userMsgId, conversationId, message);
 
         RagResult rag = retrieveKnowledgeBase(message, enableRag);
@@ -99,55 +104,44 @@ public class AiService {
             conversationService.saveRetrievalTraces(userMsgId, conversationId, rag.traces());
         }
 
-        ChatClient client = chatClientBuilder
-                .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
+        ChatClient client = chatClientBuilder.defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
                 .build();
-        var prompt = client.prompt()
-                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId))
-                .user(message);
+        var prompt = client.prompt().advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId)).user(message);
         if (!rag.isEmpty()) {
             prompt = prompt.system(buildSystemPrompt(rag.context()));
         }
 
         String doneData = buildDoneData(rag);
 
-        ServerSentEvent<String> doneEvent = ServerSentEvent.<String>builder()
-                .event("done").data(doneData).build();
+        ServerSentEvent<String> doneEvent = ServerSentEvent.<String>builder().event("done").data(doneData).build();
         StringBuilder contentBuf = new StringBuilder();
         StringBuilder reasoningBuf = new StringBuilder();
 
-        return prompt.stream().chatResponse()
-                .flatMap(response -> {
-                    Flux<ServerSentEvent<String>> events = Flux.empty();
-                    for (Generation gen : response.getResults()) {
-                        AssistantMessage output = gen.getOutput();
-                        String reasoning = extractReasoning(output);
-                        if (reasoning != null && !reasoning.isEmpty()) {
-                            reasoningBuf.append(reasoning);
-                            events = events.concatWith(Mono.just(
-                                    ServerSentEvent.<String>builder()
-                                            .event("thinking").data(reasoning).build()));
-                        }
-                        String content = output.getText();
-                        if (content != null && !content.isEmpty()) {
-                            contentBuf.append(content);
-                            events = events.concatWith(Mono.just(
-                                    ServerSentEvent.<String>builder()
-                                            .event("content").data(content).build()));
-                        }
-                    }
-                    return events;
-                })
-                .concatWith(Mono.just(doneEvent))
-                .doOnComplete(() -> {
-                    conversationService.saveAssistantMessage(
-                            aiMsgId, conversationId, contentBuf.toString());
-                    if (reasoningBuf.length() > 0) {
-                        conversationService.saveReasoningTrace(
-                                UUID.randomUUID().toString(), aiMsgId,
-                                conversationId, reasoningBuf.toString());
-                    }
-                });
+        return prompt.stream().chatResponse().flatMap(response -> {
+            Flux<ServerSentEvent<String>> events = Flux.empty();
+            for (Generation gen : response.getResults()) {
+                AssistantMessage output = gen.getOutput();
+                String reasoning = extractReasoning(output);
+                if (reasoning != null && !reasoning.isEmpty()) {
+                    reasoningBuf.append(reasoning);
+                    events = events.concatWith(
+                            Mono.just(ServerSentEvent.<String>builder().event("thinking").data(reasoning).build()));
+                }
+                String content = output.getText();
+                if (content != null && !content.isEmpty()) {
+                    contentBuf.append(content);
+                    events = events.concatWith(
+                            Mono.just(ServerSentEvent.<String>builder().event("content").data(content).build()));
+                }
+            }
+            return events;
+        }).concatWith(Mono.just(doneEvent)).doOnComplete(() -> {
+            conversationService.saveAssistantMessage(aiMsgId, conversationId, contentBuf.toString());
+            if (reasoningBuf.length() > 0) {
+                conversationService.saveReasoningTrace(UUID.randomUUID().toString(), aiMsgId, conversationId,
+                        reasoningBuf.toString());
+            }
+        });
     }
 
     /** 从知识库检索上下文 */
@@ -172,12 +166,12 @@ public class AiService {
 
     /** 编码 SSE done 事件数据——检索到的文档名列表 */
     private String buildDoneData(RagResult rag) {
-        if (rag.isEmpty()) return "";
+        if (rag.isEmpty())
+            return "";
         return rag.traces().stream()
-                .map(t -> t.get("documentName") + "|" + ((String) t.get("contentSnippet"))
-                        .replace("\n", " ").replace("\r", " "))
-                .reduce((a, b) -> a + "\n" + b)
-                .orElse("");
+                .map(t -> t.get("documentName") + "|"
+                        + ((String) t.get("contentSnippet")).replace("\n", " ").replace("\r", " "))
+                .reduce((a, b) -> a + "\n" + b).orElse("");
     }
 
     /** 从 AssistantMessage 中提取 DeepSeek 推理内容 */

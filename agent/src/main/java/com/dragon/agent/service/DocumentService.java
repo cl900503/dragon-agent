@@ -30,10 +30,8 @@ import com.dragon.agent.service.storage.FileStorageService;
 /**
  * 文档管理服务——文件上传、解析、分块、向量索引和 RAG 检索的完整生命周期管理。
  *
- * 职责：
- * - 文档上传流程：MinIO 存储 → Tika 解析 → TokenTextSplitter 分块 → Milvus 向量索引
- * - 文档列表与删除（按用户隔离）
- * - RAG 语义检索：查询向量化 → Milvus 相似度搜索 → 格式化上下文
+ * 职责： - 文档上传流程：MinIO 存储 → Tika 解析 → TokenTextSplitter 分块 → Milvus 向量索引 -
+ * 文档列表与删除（按用户隔离） - RAG 语义检索：查询向量化 → Milvus 相似度搜索 → 格式化上下文
  *
  * @author 陈龙
  * @since 2026-06-01
@@ -70,23 +68,29 @@ public class DocumentService {
     /**
      * 上传并处理文档——存储到 MinIO、解析文本、分块、写入向量索引。
      *
-     * @param fileData       文件输入流
-     * @param originalName   原始文件名
-     * @param fileSize       文件大小（字节）
-     * @param mimeType       MIME 类型
-     * @param conversationId 关联会话 ID，可为空
-     * @param username       上传者用户名
+     * @param fileData
+     *            文件输入流
+     * @param originalName
+     *            原始文件名
+     * @param fileSize
+     *            文件大小（字节）
+     * @param mimeType
+     *            MIME 类型
+     * @param conversationId
+     *            关联会话 ID，可为空
+     * @param username
+     *            上传者用户名
      * @return 文档响应 DTO
      */
     @Transactional
-    public DocumentResponse upload(InputStream fileData, String originalName, long fileSize,
-                                    String mimeType, String conversationId, String username) {
+    public DocumentResponse upload(InputStream fileData, String originalName, long fileSize, String mimeType,
+            String conversationId, String username) {
         UserEntity user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new IllegalStateException("用户不存在: " + username));
         String docId = UUID.randomUUID().toString();
 
-        DocumentEntity entity = new DocumentEntity(docId, user.getId(), conversationId,
-                originalName, "", fileSize, mimeType);
+        DocumentEntity entity = new DocumentEntity(docId, user.getId(), conversationId, originalName, "", fileSize,
+                mimeType);
         entity.setStatus(DocumentStatus.UPLOADING);
         documentRepository.save(entity);
 
@@ -103,7 +107,8 @@ public class DocumentService {
             documentRepository.save(entity);
 
             List<Document> chunks = chunkingService.chunk(List.of(parsedDoc));
-            if (chunks.isEmpty()) throw new RuntimeException("文档内容为空");
+            if (chunks.isEmpty())
+                throw new RuntimeException("文档内容为空");
             for (int i = 0; i < chunks.size(); i++) {
                 Document chunk = chunks.get(i);
                 chunk.getMetadata().put("documentId", docId);
@@ -117,8 +122,11 @@ public class DocumentService {
             }
 
             if (vectorStore != null) {
-                try { vectorStore.add(chunks); }
-                catch (Exception e) { log.warn("Vector indexing failed for [{}]: {}", originalName, e.getMessage()); }
+                try {
+                    vectorStore.add(chunks);
+                } catch (Exception e) {
+                    log.warn("Vector indexing failed for [{}]: {}", originalName, e.getMessage());
+                }
             }
 
             entity.setChunkCount(chunks.size());
@@ -138,13 +146,16 @@ public class DocumentService {
     /**
      * 列出用户的文档。
      *
-     * @param username       用户名
-     * @param conversationId 会话 ID，为空时列出全局文档
+     * @param username
+     *            用户名
+     * @param conversationId
+     *            会话 ID，为空时列出全局文档
      * @return 文档列表
      */
     public List<DocumentResponse> listDocuments(String username, String conversationId) {
         UserEntity user = userRepository.findByUsername(username).orElse(null);
-        if (user == null) return List.of();
+        if (user == null)
+            return List.of();
         List<DocumentEntity> entities = (conversationId != null && !conversationId.isBlank())
                 ? documentRepository.findByUserIdAndConversationIdOrderByCreatedAtDesc(user.getId(), conversationId)
                 : documentRepository.findByUserIdAndConversationIdIsNullOrderByCreatedAtDesc(user.getId());
@@ -154,8 +165,10 @@ public class DocumentService {
     /**
      * 删除文档——清理 MinIO 文件、Milvus 向量和 MySQL 元数据。
      *
-     * @param documentId 文档 ID
-     * @param username   所有者用户名
+     * @param documentId
+     *            文档 ID
+     * @param username
+     *            所有者用户名
      */
     @Transactional
     public void deleteDocument(String documentId, String username) {
@@ -163,9 +176,17 @@ public class DocumentService {
                 .orElseThrow(() -> new IllegalStateException("用户不存在: " + username));
         DocumentEntity entity = documentRepository.findByIdAndUserId(documentId, user.getId())
                 .orElseThrow(() -> new IllegalArgumentException("文档不存在或无权访问"));
-        try { fileStorageService.delete(entity.getStoredPath()); } catch (Exception e) { log.warn("MinIO delete failed"); }
+        try {
+            fileStorageService.delete(entity.getStoredPath());
+        } catch (Exception e) {
+            log.warn("MinIO delete failed");
+        }
         if (vectorStore != null) {
-            try { vectorStore.delete("documentId == '" + documentId + "'"); } catch (Exception e) { log.warn("Vector delete failed"); }
+            try {
+                vectorStore.delete("documentId == '" + documentId + "'");
+            } catch (Exception e) {
+                log.warn("Vector delete failed");
+            }
         }
         documentRepository.delete(entity);
     }
@@ -173,16 +194,19 @@ public class DocumentService {
     /**
      * RAG 语义检索——将查询向量化后在 Milvus 中搜索相似文档片段。
      *
-     * @param query 用户查询文本
+     * @param query
+     *            用户查询文本
      * @return 检索结果，包含格式化上下文和追溯数据
      */
     public RagResult retrieveContext(String query) {
-        if (vectorStore == null) return RagResult.EMPTY;
+        if (vectorStore == null)
+            return RagResult.EMPTY;
         try {
-            SearchRequest request = SearchRequest.builder()
-                    .query(query).topK(topK).similarityThreshold(similarityThreshold).build();
+            SearchRequest request = SearchRequest.builder().query(query).topK(topK)
+                    .similarityThreshold(similarityThreshold).build();
             List<Document> results = vectorStore.similaritySearch(request);
-            if (results.isEmpty()) return RagResult.EMPTY;
+            if (results.isEmpty())
+                return RagResult.EMPTY;
             log.debug("RAG retrieved {} chunks", results.size());
             List<Map<String, Object>> traces = buildTraces(results);
             return new RagResult(formatContext(results), traces);
@@ -195,8 +219,10 @@ public class DocumentService {
     /**
      * 重试处理失败的文档——重新解析、分块、索引。
      *
-     * @param documentId 文档 ID
-     * @param username   所有者用户名
+     * @param documentId
+     *            文档 ID
+     * @param username
+     *            所有者用户名
      */
     @Transactional
     public void retryDocument(String documentId, String username) {
@@ -209,7 +235,8 @@ public class DocumentService {
         log.info("Retrying document [{}]", entity.getOriginalName());
         try {
             InputStream storedStream = fileStorageService.read(entity.getStoredPath());
-            Document parsedDoc = documentParserService.parse(storedStream, entity.getOriginalName(), entity.getMimeType());
+            Document parsedDoc = documentParserService.parse(storedStream, entity.getOriginalName(),
+                    entity.getMimeType());
             storedStream.close();
             List<Document> chunks = chunkingService.chunk(List.of(parsedDoc));
             for (int i = 0; i < chunks.size(); i++) {
@@ -218,7 +245,11 @@ public class DocumentService {
                 chunks.get(i).getMetadata().put("chunkIndex", String.valueOf(i));
             }
             if (vectorStore != null) {
-                try { vectorStore.add(chunks); } catch (Exception e) { log.warn("Retry index failed"); }
+                try {
+                    vectorStore.add(chunks);
+                } catch (Exception e) {
+                    log.warn("Retry index failed");
+                }
             }
             entity.setChunkCount(chunks.size());
             entity.setStatus(DocumentStatus.READY);
@@ -234,16 +265,21 @@ public class DocumentService {
     /**
      * 获取 MinIO 文件输入流。
      *
-     * @param objectKey MinIO 对象 Key
+     * @param objectKey
+     *            MinIO 对象 Key
      * @return 文件输入流
      */
-    public InputStream getFileStream(String objectKey) { return fileStorageService.read(objectKey); }
+    public InputStream getFileStream(String objectKey) {
+        return fileStorageService.read(objectKey);
+    }
 
     /**
      * 获取文档实体并校验所有权。
      *
-     * @param documentId 文档 ID
-     * @param username   所有者用户名
+     * @param documentId
+     *            文档 ID
+     * @param username
+     *            所有者用户名
      * @return 文档实体
      */
     public DocumentEntity getDocumentEntity(String documentId, String username) {
@@ -279,6 +315,8 @@ public class DocumentService {
     /** RAG 检索结果封装 */
     public record RagResult(String context, List<Map<String, Object>> traces) {
         public static final RagResult EMPTY = new RagResult("", List.of());
-        public boolean isEmpty() { return context.isEmpty(); }
+        public boolean isEmpty() {
+            return context.isEmpty();
+        }
     }
 }

@@ -13,8 +13,7 @@ import io.minio.MinioClient;
 /**
  * MinIO 对象存储客户端配置。
  *
- * 启动时自动检查并创建 Bucket。
- * 若 MinIO 未就绪，仅记录警告，不阻止应用启动（首次使用时再报错）。
+ * 启动时自动检查并创建 Bucket。 若 MinIO 未就绪，仅记录警告，不阻止应用启动（首次使用时再报错）。
  *
  * @author 陈龙
  * @since 2026-06-01
@@ -38,10 +37,7 @@ public class MinioConfig {
 
     @Bean
     public MinioClient minioClient() {
-        MinioClient client = MinioClient.builder()
-                .endpoint(endpoint)
-                .credentials(accessKey, secretKey)
-                .build();
+        MinioClient client = MinioClient.builder().endpoint(endpoint).credentials(accessKey, secretKey).build();
 
         // 启动时尝试创建 Bucket——失败不阻止启动，仅记录警告
         try {
@@ -53,7 +49,9 @@ public class MinioConfig {
                 log.info("MinIO bucket [{}] already exists at {}", bucket, endpoint);
             }
         } catch (Exception e) {
-            log.warn("MinIO not reachable at {}: {}. The application will start, but file upload will fail until MinIO is running.", endpoint, e.getMessage());
+            log.warn(
+                    "MinIO not reachable at {}: {}. The application will start, but file upload will fail until MinIO is running.",
+                    endpoint, e.getMessage());
         }
 
         return client;

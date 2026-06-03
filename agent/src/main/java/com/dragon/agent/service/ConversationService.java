@@ -94,7 +94,8 @@ public class ConversationService {
                         r.put("documentName", rt.getDocumentName());
                         r.put("chunkIndex", rt.getChunkIndex());
                         r.put("contentSnippet", rt.getContentSnippet());
-                        if (rt.getScore() != null) r.put("score", rt.getScore());
+                        if (rt.getScore() != null)
+                            r.put("score", rt.getScore());
                         rtList.add(r);
                     }
                     item.put("retrievalTraces", rtList);
@@ -147,7 +148,8 @@ public class ConversationService {
 
     public List<Map<String, String>> listConversations(String username) {
         UserEntity user = userRepository.findByUsername(username).orElse(null);
-        if (user == null) return List.of();
+        if (user == null)
+            return List.of();
         List<ConversationEntity> entities = conversationRepository.findByUserIdOrderByCreatedAtDesc(user.getId());
         List<Map<String, String>> result = new ArrayList<>();
         for (ConversationEntity entity : entities) {
@@ -161,7 +163,8 @@ public class ConversationService {
 
     public boolean isOwner(String conversationId, String username) {
         UserEntity user = userRepository.findByUsername(username).orElse(null);
-        if (user == null) return false;
+        if (user == null)
+            return false;
         return conversationRepository.findByIdAndUserId(conversationId, user.getId()).isPresent();
     }
 

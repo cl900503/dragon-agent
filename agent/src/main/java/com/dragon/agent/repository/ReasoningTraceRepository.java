@@ -8,5 +8,6 @@ import com.dragon.agent.entity.ReasoningTrace;
 
 public interface ReasoningTraceRepository extends JpaRepository<ReasoningTrace, String> {
     Optional<ReasoningTrace> findByMessageId(String messageId);
+
     void deleteByConversationId(String conversationId);
 }
