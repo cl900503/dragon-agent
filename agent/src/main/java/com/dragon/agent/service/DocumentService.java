@@ -312,11 +312,6 @@ public class DocumentService {
                 .orElseThrow(() -> new IllegalArgumentException("文档不存在或无权访问"));
     }
 
-    /** 统计会话关联的文档数量 */
-    public long countDocumentsByConversation(String conversationId) {
-        return documentRepository.countByConversationId(conversationId);
-    }
-
     // ---- 私有方法 ----
 
     private List<Map<String, Object>> buildTraces(List<Document> documents) {
