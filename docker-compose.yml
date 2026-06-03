@@ -52,6 +52,16 @@ services:
     volumes:
       - milvus_data:/var/lib/milvus
 
+  attu:
+    image: zilliz/attu:latest
+    container_name: dragon-attu
+    environment:
+      MILVUS_URL: milvus:19530
+    ports:
+      - "8000:3000"
+    depends_on:
+      - milvus
+
   tei:
     image: ghcr.io/huggingface/text-embeddings-inference:cpu-latest
     container_name: dragon-tei

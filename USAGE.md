@@ -58,11 +58,34 @@ cd dragon-agent
 docker compose up -d
 ```
 
-启动容器：MySQL (3306)、etcd (2379)、Milvus (19530)、MinIO (9000/9001)、TEI BGE-M3 (8081)。
+**服务端口一览**：
+
+| 服务 | 端口 | 说明 |
+|------|------|------|
+| MySQL | 3306 | 关系数据库 |
+| etcd | 2379 | Milvus 元数据存储 |
+| Milvus | 19530 | 向量数据库 gRPC |
+| MinIO S3 | 9000 | 对象存储 API |
+| MinIO Console | 9001 | 对象存储 Web 管理 |
+| TEI BGE-M3 | 8081 | Embedding 服务 |
+| Milvus Attu | 8000 | 向量数据库 Web 管理 |
+| Backend | 8080 | Spring Boot API |
+| Frontend | 5173 | Vite 开发服务器 |
 
 首次启动 TEI 需下载 BGE-M3 模型（约 2.2GB），等待 3-5 分钟。正常重启使用 `docker compose down && docker compose up -d`（不加 -v），模型保留在 tei_data 卷中。
 
-### 3. 启动后端
+### 3. 中间件管理界面
+
+| 工具 | 地址 | 说明 |
+|------|------|------|
+| MinIO Console | http://localhost:9001 | 对象存储管理，浏览/上传/删除文件 |
+| Milvus Attu | http://localhost:8000 | 向量数据库管理，查看 Collection、数据、索引 |
+
+**MinIO Console**：账号 `minioadmin`，密码 `minioadmin`。登录后可查看 `dragon-agent` bucket 中存储的所有文档。
+
+**Milvus Attu**：首次打开填写 Milvus 连接地址 `localhost:19530`，点击连接即可查看 `vector_store` Collection 中的向量数据和索引状态。
+
+### 4. 启动后端
 
 ```bash
 cd agent
@@ -71,7 +94,7 @@ mvn spring-boot:run -Dspring-boot.run.profiles=dev
 
 生产环境使用 `-Dspring-boot.run.profiles=prod`，所有敏感值通过环境变量注入。
 
-### 4. 启动前端
+### 5. 启动前端
 
 ```bash
 cd agent-ui
