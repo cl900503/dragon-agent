@@ -62,10 +62,19 @@ export default function KnowledgeBase({ documents, onDocumentsChange }: Props) {
     setUploading(tasks)
     const newDocs: UploadedDocument[] = []
     await Promise.all(Array.from(files).map(async (file, i) => {
-      try { const d = await uploadFile(file); newDocs.push(d); setUploading(p => p.map((t, j) => j === i ? { ...t, done: true } : t)) }
-      catch (err) { setUploading(p => p.map((t, j) => j === i ? { ...t, done: true, error: err instanceof Error ? err.message : '失败' } : t)) }
+      try {
+        const d = await uploadFile(file)
+        newDocs.push(d)
+        setUploading(p => p.map((t, j) => j === i ? { ...t, done: true } : t))
+      } catch (err) {
+        setUploading(p => p.map((t, j) => j === i
+          ? { ...t, done: true, error: err instanceof Error ? err.message : '失败' } : t))
+      }
     }))
-    if (newDocs.length > 0) onDocumentsChange([...newDocs, ...documents])
+    // 批量上传全部完成后一次性更新列表，避免多次重渲染导致抖动
+    if (newDocs.length > 0) {
+      onDocumentsChange([...newDocs, ...documents])
+    }
     setTimeout(() => setUploading([]), 3000)
   }, [documents, onDocumentsChange])
 
@@ -138,17 +147,15 @@ export default function KnowledgeBase({ documents, onDocumentsChange }: Props) {
           onChange={e => { if (e.target.files) { handleFiles(e.target.files); e.target.value = '' } }} />
       </div>
 
-      {uploading.length > 0 && (
-        <div className="kb-uploading">
-          {uploading.map((t, i) => (
-            <div key={i} className={`kb-upload-item ${t.done ? (t.error ? 'kb-upload-err' : 'kb-upload-ok') : ''}`}>
-              {t.done ? (t.error ? '✕' : '✓') : <span className="kb-spinner" />}
-              <span className="kb-upload-name">{t.name}</span>
-              {t.error && <span className="kb-upload-msg">{t.error}</span>}
-            </div>
-          ))}
-        </div>
-      )}
+      <div className="kb-uploading">
+        {uploading.map((t, i) => (
+          <div key={i} className={`kb-upload-item ${t.done ? (t.error ? 'kb-upload-err' : 'kb-upload-ok') : ''}`}>
+            {t.done ? (t.error ? '✕' : '✓') : <span className="kb-spinner" />}
+            <span className="kb-upload-name">{t.name}</span>
+            {t.error && <span className="kb-upload-msg">{t.error}</span>}
+          </div>
+        ))}
+      </div>
 
       {documents.length === 0 ? (
         <div className="kb-empty"><span className="kb-empty-icon">📭</span><p>知识库为空，上传文档后 AI 可在对话中检索</p></div>
