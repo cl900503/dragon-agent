@@ -136,6 +136,10 @@ public class DocumentService {
             return DocumentResponse.from(entity);
         } catch (Exception e) {
             log.error("Document processing failed [{}]: {}", originalName, e.getMessage());
+            // 补偿清理：如果 MinIO 已存储但后续步骤失败，删除已存文件
+            if (entity.getStoredPath() != null && !entity.getStoredPath().isBlank()) {
+                try { fileStorageService.delete(entity.getStoredPath()); } catch (Exception ignored) {}
+            }
             entity.setStatus(DocumentStatus.FAILED);
             entity.setErrorMessage(e.getMessage());
             documentRepository.save(entity);
