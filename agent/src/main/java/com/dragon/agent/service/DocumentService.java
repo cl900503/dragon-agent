@@ -247,6 +247,11 @@ public class DocumentService {
             }
             if (vectorStore != null) {
                 try {
+                    vectorStore.delete("documentId == '" + documentId + "'");
+                } catch (Exception e) {
+                    log.warn("Retry cleanup old vectors failed: {}", e.getMessage());
+                }
+                try {
                     vectorStore.add(chunks);
                 } catch (Exception e) {
                     log.warn("Retry index failed");
