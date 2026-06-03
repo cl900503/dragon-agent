@@ -100,9 +100,10 @@ public class DocumentService {
             entity.setStatus(DocumentStatus.PARSING);
             documentRepository.save(entity);
 
-            InputStream storedStream = fileStorageService.read(objectKey);
-            Document parsedDoc = documentParserService.parse(storedStream, originalName, mimeType);
-            storedStream.close();
+            Document parsedDoc;
+            try (InputStream storedStream = fileStorageService.read(objectKey)) {
+                parsedDoc = documentParserService.parse(storedStream, originalName, mimeType);
+            }
             entity.setStatus(DocumentStatus.INDEXING);
             documentRepository.save(entity);
 
@@ -238,11 +239,9 @@ public class DocumentService {
         if (entity.getStatus() != DocumentStatus.FAILED)
             throw new IllegalStateException("只能重试失败状态的文档");
         log.info("Retrying document [{}]", entity.getOriginalName());
-        try {
-            InputStream storedStream = fileStorageService.read(entity.getStoredPath());
+        try (InputStream storedStream = fileStorageService.read(entity.getStoredPath())) {
             Document parsedDoc = documentParserService.parse(storedStream, entity.getOriginalName(),
                     entity.getMimeType());
-            storedStream.close();
             List<Document> chunks = chunkingService.chunk(List.of(parsedDoc));
             for (int i = 0; i < chunks.size(); i++) {
                 chunks.get(i).getMetadata().put("documentId", documentId);
@@ -322,7 +321,7 @@ public class DocumentService {
         StringBuilder sb = new StringBuilder();
         for (Document doc : documents) {
             String name = (String) doc.getMetadata().getOrDefault("originalName", "未知");
-            sb.append("📄 %s\n%s\n\n".formatted(name, doc.getText()));
+            sb.append("[%s]\n%s\n\n".formatted(name, doc.getText()));
         }
         return sb.toString();
     }
