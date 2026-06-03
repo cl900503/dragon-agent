@@ -71,13 +71,8 @@ export default function KnowledgeBase({ documents, onDocumentsChange }: Props) {
           ? { ...t, done: true, error: err instanceof Error ? err.message : '失败' } : t))
       }
     }))
-    // 进度条消失后再更新列表，避免更新和消失同时触发重排
-    setTimeout(() => {
-      setUploading([])
-      if (newDocs.length > 0) {
-        onDocumentsChange([...newDocs, ...documents])
-      }
-    }, 1500)
+    if (newDocs.length > 0) onDocumentsChange([...newDocs, ...documents])
+    setTimeout(() => setUploading([]), 3000)
   }, [documents, onDocumentsChange])
 
   const onDragOver = (e: DragEvent) => { e.preventDefault(); setDragOver(true) }
