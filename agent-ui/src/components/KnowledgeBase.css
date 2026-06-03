@@ -1,6 +1,6 @@
 .kb-page { flex: 1; overflow-y: auto; padding: 24px 32px; max-width: 840px; margin: 0 auto; width: 100%; }
 
-.kb-top { display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px; }
+.kb-top { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; min-height: 36px; flex-wrap: wrap; }
 .kb-top h2 { margin: 0; font-size: 20px; color: #1e293b; font-weight: 700; }
 .kb-summary { font-size: 13px; color: #94a3b8; }
 
@@ -11,23 +11,14 @@
 .kb-drop-text { font-size: 14px; color: #334155; font-weight: 500; }
 .kb-drop-hint { font-size: 12px; color: #94a3b8; }
 
-/* 上传进度 — 上传区正下方，页面自然流式布局 */
-.kb-uploading {
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
-  margin-bottom: 14px; min-height: 36px;
-}
-.kb-upload-item {
-  display: flex; align-items: center; gap: 8px; padding: 8px 16px;
-  background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px;
-  font-size: 13px; color: #166534;
-  min-width: 320px;
-}
-.kb-upload-err {
-  background: #fef2f2; border-color: #fecaca; color: #ef4444;
-}
-.kb-upload-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 上传进度 — 与标题同行 */
+.kb-uploading { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.kb-upload-item { display: flex; align-items: center; gap: 6px; padding: 4px 12px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; font-size: 12px; color: #166534; }
+.kb-upload-err { background: #fef2f2; border-color: #fecaca; color: #ef4444; }
+.kb-upload-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kb-upload-status { font-size: 11px; color: #94a3b8; white-space: nowrap; }
 .kb-upload-msg { font-size: 11px; color: #ef4444; }
-.kb-spinner { width: 14px; height: 14px; border: 2px solid #e2e8f0; border-top-color: #4f46e5; border-radius: 50%; animation: kb-spin 0.7s linear infinite; flex-shrink: 0; }
+.kb-spinner { width: 12px; height: 12px; border: 2px solid #e2e8f0; border-top-color: #4f46e5; border-radius: 50%; animation: kb-spin 0.7s linear infinite; flex-shrink: 0; }
 @keyframes kb-spin { to { transform: rotate(360deg); } }
 
 /* 空状态 */

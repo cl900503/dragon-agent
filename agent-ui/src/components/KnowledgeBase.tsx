@@ -129,6 +129,16 @@ export default function KnowledgeBase({ documents, onDocumentsChange }: Props) {
       <div className="kb-top">
         <h2>知识库</h2>
         {documents.length > 0 && <span className="kb-summary">{ready}/{documents.length} 就绪 · {formatSize(totalSize)}</span>}
+        <div className="kb-uploading">
+          {uploading.map((t, i) => (
+            <div key={i} className={`kb-upload-item${t.done ? (t.error ? ' kb-upload-err' : '') : ''}`}>
+              {t.done ? (t.error ? '✕' : '✓') : <span className="kb-spinner" />}
+              <span className="kb-upload-name">{t.name}</span>
+              <span className="kb-upload-status">{t.done ? (t.error ? '失败' : '上传成功') : '上传中...'}</span>
+              {t.error && <span className="kb-upload-msg">{t.error}</span>}
+            </div>
+          ))}
+        </div>
       </div>
 
       {error && <div className="kb-error"><span>{error}</span><button onClick={() => setError(null)}>✕</button></div>}
@@ -142,17 +152,6 @@ export default function KnowledgeBase({ documents, onDocumentsChange }: Props) {
         <input ref={fileInputRef} type="file" hidden multiple
           accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.csv,.json,.java,.py,.c,.cpp,.js,.ts,.html,.css,.xml,.yaml,.yml,.log"
           onChange={e => { if (e.target.files) { handleFiles(e.target.files); e.target.value = '' } }} />
-      </div>
-
-      {/* 上传进度 — 紧跟上传区 */}
-      <div className="kb-uploading">
-        {uploading.map((t, i) => (
-          <div key={i} className={`kb-upload-item${t.done ? (t.error ? ' kb-upload-err' : '') : ''}`}>
-            {t.done ? (t.error ? '✕' : '✓') : <span className="kb-spinner" />}
-            <span className="kb-upload-name">{t.name}</span>
-            {t.error && <span className="kb-upload-msg">{t.error}</span>}
-          </div>
-        ))}
       </div>
 
       {documents.length === 0 ? (
