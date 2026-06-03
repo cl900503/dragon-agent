@@ -65,7 +65,7 @@
             <artifactId>spring-ai-starter-model-chat-memory-repository-jdbc</artifactId>
         </dependency>
 
-        <!-- BGE-M3 通过 TEI REST API 调用，无需 OpenAI 依赖 -->
+        <!-- BGE-M3 通过自定义 EmbeddingModel 接入 TEI，无需 OpenAI 依赖 -->
 
         <!-- Spring AI Milvus Vector Store Starter: 向量存储与语义检索（含自动配置） -->
         <dependency>

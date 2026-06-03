@@ -51,10 +51,7 @@ app:
     allowed-origins: ${CORS_ORIGINS:http://localhost:5173}
   auth:
     token-secret: ${AUTH_TOKEN_SECRET:dragon-agent-default-secret-change-in-production}
-  # BGE-M3 Embedding 由 RagConfig 中的 TeiEmbeddingModel 直接调用
-  embedding:
-    tei:
-      base-url: ${TEI_BASE_URL:http://localhost:8081/v1}
+  # BGE-M3 Embedding 由 RagConfig.TeiEmbeddingModel 实现
 
   # MinIO 对象存储
   minio:

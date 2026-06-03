@@ -16,17 +16,19 @@ import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.embedding.EmbeddingRequest;
 import org.springframework.ai.embedding.EmbeddingResponse;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
- * RAG Embedding 模型配置。
+ * RAG Embedding 配置——BGE-M3 via TEI (Text Embeddings Inference)。
  *
- * 通过 TEI (Text Embeddings Inference) 容器调用 BGE-M3 模型，
- * 使用标准 HTTP 客户端同步调用，避免 WebFlux 事件循环阻塞。
+ * 通过 Spring AI 标准 EmbeddingModel 接口接入，实现与 MilvusVectorStore 的无缝集成。
+ * TEI 提供 OpenAI 兼容的 /v1/embeddings 端点，使用 JDK HttpClient 同步调用。
+ *
+ * 注：Spring AI 2.0.0-M8 的 OpenAI 自动配置无法正确解析自定义 base-url 指向 TEI，
+ * 因此通过 @Bean 显式创建 EmbeddingModel，后续升级 Spring AI 版本后可切换为自动配置。
  *
  * @author 陈龙
  * @since 2026-06-02
@@ -37,15 +39,12 @@ public class RagConfig {
     private static final Logger log = LoggerFactory.getLogger(RagConfig.class);
 
     /**
-     * 创建 BGE-M3 Embedding 模型 Bean。
+     * 创建 BGE-M3 Embedding 实现，通过 TEI REST API 调用。
      *
-     * 仅在没有其他 EmbeddingModel 实现时生效，保证可以替换为其他模型。
-     *
-     * @param teiBaseUrl TEI 服务地址，默认 http://localhost:8081/v1
-     * @return TeiEmbeddingModel 实例
+     * @param teiBaseUrl TEI 服务地址
+     * @return EmbeddingModel 实现
      */
     @Bean
-    @ConditionalOnMissingBean(EmbeddingModel.class)
     public EmbeddingModel embeddingModel(
             @Value("${app.embedding.tei.base-url:http://localhost:8081/v1}") String teiBaseUrl) {
         log.info("BGE-M3 Embedding via TEI at {}", teiBaseUrl);
@@ -53,10 +52,7 @@ public class RagConfig {
     }
 
     /**
-     * 通过 TEI REST API 调用 BGE-M3 模型的 EmbeddingModel 实现。
-     *
-     * TEI 的 /v1/embeddings 端点兼容 OpenAI Embedding API 格式。
-     * 使用 JDK HttpClient 同步调用，适配 EmbeddingModel 的同步接口。
+     * TEI BGE-M3 Embedding 实现，遵循 Spring AI EmbeddingModel 接口规范。
      */
     static class TeiEmbeddingModel implements EmbeddingModel {
 
