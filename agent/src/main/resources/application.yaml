@@ -9,6 +9,10 @@ spring:
   application:
     name: agent
 
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiChatAutoConfiguration
+
   # 响应式 multipart 文件上传配置
   codec:
     max-in-memory-size: 20MB
@@ -39,6 +43,13 @@ spring:
         embedding-dimension: 1024
         collection-name: ${MILVUS_COLLECTION:vector_store}
         initialize-schema: true
+    # OpenAI Embedding 客户端（指向 TEI BGE-M3，OpenAI 兼容 API）
+    openai:
+      api-key: dummy
+      base-url: http://localhost:8081
+      embedding:
+        options:
+          model: BAAI/bge-m3
     chat:
       memory:
         repository:
@@ -51,7 +62,6 @@ app:
     allowed-origins: ${CORS_ORIGINS:http://localhost:5173}
   auth:
     token-secret: ${AUTH_TOKEN_SECRET:dragon-agent-default-secret-change-in-production}
-  # BGE-M3 Embedding 由 RagConfig.TeiEmbeddingModel 实现
 
   # MinIO 对象存储
   minio:
