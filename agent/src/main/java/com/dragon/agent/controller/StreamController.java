@@ -39,7 +39,9 @@ public class StreamController {
     public Flux<ServerSentEvent<String>> stream(@Valid @RequestBody ChatRequest request) {
         return securityHelper.currentUsername().flatMapMany(username -> {
             String cid = conversationService.resolveConversationId(request.conversationId(), username);
-            return aiService.stream(request.message(), cid, request.enableRag(), request.userMsgId(), request.aiMsgId())
+            return aiService
+                    .stream(request.message(), cid, request.enableRag(), request.userMsgId(), request.aiMsgId(),
+                            username)
                     .doOnComplete(() -> conversationService.updateConversationTitle(cid));
         });
     }

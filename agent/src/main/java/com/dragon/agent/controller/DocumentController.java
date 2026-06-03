@@ -126,8 +126,9 @@ public class DocumentController {
         String query = body.getOrDefault("query", "");
         if (query.isBlank())
             return Mono.just(ResponseEntity.badRequest().body(Map.of("error", "query 不能为空")));
-        return Mono.fromCallable(() -> {
-            var result = documentService.retrieveContext(query);
+        return securityHelper.currentUsername().flatMap(username -> Mono.fromCallable(() -> {
+            Long userId = documentService.getUserId(username);
+            var result = documentService.retrieveContext(query, userId);
             Map<String, Object> response = new LinkedHashMap<>();
             response.put("query", query);
             response.put("hit", !result.isEmpty());
@@ -137,7 +138,7 @@ public class DocumentController {
                             ? null
                             : result.context().substring(0, Math.min(500, result.context().length())));
             return ResponseEntity.ok(response);
-        }).subscribeOn(Schedulers.boundedElastic());
+        }).subscribeOn(Schedulers.boundedElastic()));
     }
 
     @GetMapping("/{id}/download")

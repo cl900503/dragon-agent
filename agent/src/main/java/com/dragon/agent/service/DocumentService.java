@@ -198,12 +198,13 @@ public class DocumentService {
      *            用户查询文本
      * @return 检索结果，包含格式化上下文和追溯数据
      */
-    public RagResult retrieveContext(String query) {
-        if (vectorStore == null)
+    public RagResult retrieveContext(String query, Long userId) {
+        if (vectorStore == null || userId == null)
             return RagResult.EMPTY;
         try {
             SearchRequest request = SearchRequest.builder().query(query).topK(topK)
-                    .similarityThreshold(similarityThreshold).build();
+                    .similarityThreshold(similarityThreshold)
+                    .filterExpression("userId == '" + userId + "'").build();
             List<Document> results = vectorStore.similaritySearch(request);
             if (results.isEmpty())
                 return RagResult.EMPTY;
@@ -282,6 +283,11 @@ public class DocumentService {
      *            所有者用户名
      * @return 文档实体
      */
+    /** 获取用户 ID（用于 RAG 过滤） */
+    public Long getUserId(String username) {
+        return userRepository.findByUsername(username).map(u -> u.getId()).orElse(null);
+    }
+
     public DocumentEntity getDocumentEntity(String documentId, String username) {
         UserEntity user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new IllegalStateException("用户不存在: " + username));
