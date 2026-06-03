@@ -51,6 +51,9 @@ public class DocumentController {
     @Autowired
     private SecurityHelper securityHelper;
 
+    @org.springframework.beans.factory.annotation.Value("${app.upload.allowed-mime-types}")
+    private List<String> allowedMimeTypes;
+
     @PostMapping("/upload")
     public Mono<ResponseEntity<Object>> upload(@RequestPart("file") FilePart file,
             @RequestParam(name = "conversationId", required = false) String conversationId) {
@@ -61,6 +64,9 @@ public class DocumentController {
             String mimeType = file.headers().getContentType() != null
                     ? file.headers().getContentType().toString()
                     : "application/octet-stream";
+            if (!isAllowedMimeType(mimeType))
+                return Mono.just(ResponseEntity.badRequest()
+                        .body(Map.of("error", "不支持的文件类型: " + mimeType)));
             return DataBufferUtils.join(file.content()).flatMap(dataBuffer -> {
                 byte[] bytes = new byte[dataBuffer.readableByteCount()];
                 dataBuffer.read(bytes);
@@ -139,6 +145,15 @@ public class DocumentController {
                             : result.context().substring(0, Math.min(500, result.context().length())));
             return ResponseEntity.ok(response);
         }).subscribeOn(Schedulers.boundedElastic()));
+    }
+
+    /** 检查 MIME 类型是否在允许列表中 */
+    private boolean isAllowedMimeType(String mimeType) {
+        return allowedMimeTypes.stream().anyMatch(allowed -> {
+            if (allowed.endsWith("/*"))
+                return mimeType.startsWith(allowed.replace("/*", "/"));
+            return allowed.equals(mimeType);
+        });
     }
 
     @GetMapping("/{id}/download")
