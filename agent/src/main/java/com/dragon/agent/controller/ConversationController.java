@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -17,9 +18,7 @@ import com.dragon.agent.support.SecurityHelper;
 import reactor.core.publisher.Mono;
 
 /**
- * 会话管理接口——列表、详情查询和清除会话历史。
- *
- * 所有操作按当前登录用户隔离，非属主会话返回 403。
+ * 会话管理接口。
  *
  * @author 陈龙
  * @since 2026-05-31
@@ -28,20 +27,16 @@ import reactor.core.publisher.Mono;
 @RequestMapping("/api/conversations")
 public class ConversationController {
 
-    private final ConversationService conversationService;
-    private final SecurityHelper securityHelper;
+    @Autowired
+    private ConversationService conversationService;
 
-    public ConversationController(ConversationService conversationService,
-                                  SecurityHelper securityHelper) {
-        this.conversationService = conversationService;
-        this.securityHelper = securityHelper;
-    }
+    @Autowired
+    private SecurityHelper securityHelper;
 
     @GetMapping
     public Mono<ResponseEntity<List<Map<String, String>>>> listConversations() {
         return securityHelper.currentUsername()
-                .map(username -> ResponseEntity.ok(
-                        conversationService.listConversations(username)));
+                .map(username -> ResponseEntity.ok(conversationService.listConversations(username)));
     }
 
     @GetMapping("/{id}")
@@ -49,14 +44,11 @@ public class ConversationController {
         return securityHelper.currentUsername()
                 .flatMap(username -> {
                     if (!conversationService.isOwner(id, username)) {
-                        return Mono.just(ResponseEntity.status(403)
-                                .body(Map.of("error", "无权访问此会话")));
+                        return Mono.just(ResponseEntity.status(403).body(Map.of("error", "无权访问此会话")));
                     }
                     List<Map<String, Object>> messages = conversationService.getMessages(id);
                     return Mono.just(ResponseEntity.ok(Map.of(
-                            "conversationId", id,
-                            "messages", messages,
-                            "count", messages.size())));
+                            "conversationId", id, "messages", messages, "count", messages.size())));
                 });
     }
 
@@ -65,14 +57,11 @@ public class ConversationController {
         return securityHelper.currentUsername()
                 .flatMap(username -> {
                     if (!conversationService.isOwner(id, username)) {
-                        return Mono.just(ResponseEntity.status(403)
-                                .body(Map.of("error", "无权操作此会话")));
+                        return Mono.just(ResponseEntity.status(403).body(Map.of("error", "无权操作此会话")));
                     }
                     conversationService.clearConversation(id, username);
                     return Mono.just(ResponseEntity.ok(Map.of(
-                            "conversationId", id,
-                            "cleared", true,
-                            "timestamp", Instant.now())));
+                            "conversationId", id, "cleared", true, "timestamp", Instant.now())));
                 });
     }
 }

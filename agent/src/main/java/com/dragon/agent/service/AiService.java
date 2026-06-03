@@ -33,23 +33,17 @@ public class AiService {
 
     private static final Logger log = LoggerFactory.getLogger(AiService.class);
 
-    private final ChatClient chatClient;
-    private final DocumentService documentService;
-    private final ConversationService conversationService;
+    @Autowired
+    private ChatClient.Builder chatClientBuilder;
 
-    /**
-     * 构造函数，DocumentService 在 Milvus 不可用时为 null 以保证启动不阻塞。
-     */
-    public AiService(ChatClient.Builder builder,
-                     ChatMemory chatMemory,
-                     @Autowired(required = false) DocumentService documentService,
-                     ConversationService conversationService) {
-        this.documentService = documentService;
-        this.conversationService = conversationService;
-        this.chatClient = builder
-                .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
-                .build();
-    }
+    @Autowired
+    private ChatMemory chatMemory;
+
+    @Autowired(required = false)
+    private DocumentService documentService;
+
+    @Autowired
+    private ConversationService conversationService;
 
     /**
      * 同步对话——保存消息、检索知识库、调用 LLM、保存回复。
@@ -70,7 +64,10 @@ public class AiService {
             conversationService.saveRetrievalTraces(userMsgId, conversationId, rag.traces());
         }
 
-        var prompt = chatClient.prompt()
+        ChatClient client = chatClientBuilder
+                .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
+                .build();
+        var prompt = client.prompt()
                 .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId))
                 .user(message);
         if (!rag.isEmpty()) {
@@ -102,7 +99,10 @@ public class AiService {
             conversationService.saveRetrievalTraces(userMsgId, conversationId, rag.traces());
         }
 
-        var prompt = chatClient.prompt()
+        ChatClient client = chatClientBuilder
+                .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
+                .build();
+        var prompt = client.prompt()
                 .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId))
                 .user(message);
         if (!rag.isEmpty()) {
@@ -150,8 +150,6 @@ public class AiService {
                 });
     }
 
-    // ---- 私有方法 ----
-
     /** 从知识库检索上下文 */
     private RagResult retrieveKnowledgeBase(String message, boolean enableRag) {
         if (!enableRag || documentService == null) {
@@ -174,9 +172,7 @@ public class AiService {
 
     /** 编码 SSE done 事件数据——检索到的文档名列表 */
     private String buildDoneData(RagResult rag) {
-        if (rag.isEmpty()) {
-            return "";
-        }
+        if (rag.isEmpty()) return "";
         return rag.traces().stream()
                 .map(t -> t.get("documentName") + "|" + ((String) t.get("contentSnippet"))
                         .replace("\n", " ").replace("\r", " "))

@@ -13,8 +13,6 @@ import org.springframework.stereotype.Service;
 /**
  * 文档分块服务——使用 Spring AI TokenTextSplitter 按 token 数切分文档。
  *
- * 参数通过 application.yaml 的 app.rag.chunk-size 和 chunk-overlap 配置。
- *
  * @author 陈龙
  * @since 2026-06-01
  */
@@ -23,20 +21,9 @@ public class ChunkingService {
 
     private static final Logger log = LoggerFactory.getLogger(ChunkingService.class);
 
-    private final int chunkSize;
+    @Value("${app.rag.chunk-size:512}")
+    private int chunkSize;
 
-    public ChunkingService(@Value("${app.rag.chunk-size:512}") int chunkSize) {
-        this.chunkSize = chunkSize;
-    }
-
-    /**
-     * 对文档列表进行 Token 分块。
-     *
-     * 每个分块继承原文档元数据并附加 chunkIndex 和 totalChunks 标记。
-     *
-     * @param documents 原始文档列表
-     * @return 分块后的文档列表
-     */
     public List<Document> chunk(List<Document> documents) {
         TokenTextSplitter splitter = TokenTextSplitter.builder()
                 .withChunkSize(chunkSize)
@@ -54,8 +41,7 @@ public class ChunkingService {
             chunks.addAll(docChunks);
         }
 
-        log.debug("Chunked {} documents into {} chunks (size={})",
-                documents.size(), chunks.size(), chunkSize);
+        log.debug("Chunked {} documents into {} chunks (size={})", documents.size(), chunks.size(), chunkSize);
         return chunks;
     }
 }

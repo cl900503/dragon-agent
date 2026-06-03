@@ -1,5 +1,6 @@
 package com.dragon.agent.controller;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -16,10 +17,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 /**
- * 同步对话接口——等待 AI 完整回复后一次性返回。
- *
- * 多轮对话通过 conversationId 关联上下文，每个用户的会话隔离。
- * 响应头 X-Conversation-Id 返回实际使用的会话 ID。
+ * 同步对话接口。
  *
  * @author 陈龙
  * @since 2026-05-31
@@ -28,32 +26,27 @@ import reactor.core.scheduler.Schedulers;
 @RequestMapping("/api")
 public class ChatController {
 
-    private final AiService aiService;
-    private final ConversationService conversationService;
-    private final SecurityHelper securityHelper;
+    @Autowired
+    private AiService aiService;
 
-    public ChatController(AiService aiService, ConversationService conversationService,
-                          SecurityHelper securityHelper) {
-        this.aiService = aiService;
-        this.conversationService = conversationService;
-        this.securityHelper = securityHelper;
-    }
+    @Autowired
+    private ConversationService conversationService;
+
+    @Autowired
+    private SecurityHelper securityHelper;
 
     @PostMapping("/chat")
     public Mono<ResponseEntity<String>> chat(@Valid @RequestBody ChatRequest request) {
         return securityHelper.currentUsername()
                 .flatMap(username -> {
-                    String cid = conversationService.resolveConversationId(
-                            request.conversationId(), username);
+                    String cid = conversationService.resolveConversationId(request.conversationId(), username);
                     return Mono.fromCallable(() -> aiService.chat(
-                            request.message(), cid, request.enableRag(),
-                            request.userMsgId(), request.aiMsgId()))
+                                    request.message(), cid, request.enableRag(),
+                                    request.userMsgId(), request.aiMsgId()))
                             .subscribeOn(Schedulers.boundedElastic())
                             .map(content -> {
                                 conversationService.updateConversationTitle(cid);
-                                return ResponseEntity.ok()
-                                        .header("X-Conversation-Id", cid)
-                                        .body(content);
+                                return ResponseEntity.ok().header("X-Conversation-Id", cid).body(content);
                             });
                 });
     }

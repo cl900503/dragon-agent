@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,40 +26,32 @@ import com.dragon.agent.repository.UserRepository;
 /**
  * 会话管理服务——ChatMemory + ReasoningTrace + RetrievalTrace + ToolTrace。
  *
- * ChatMemory 仅用于 Spring AI 对话上下文运行时管理。
- * 消息和三种 Trace 使用自建表持久化。
- *
  * @author 陈龙
  * @since 2026-05-31
  */
 @Service
 public class ConversationService {
 
-    private final ChatMemory chatMemory;
-    private final ConversationRepository conversationRepository;
-    private final MessageRepository messageRepository;
-    private final ReasoningTraceRepository reasoningTraceRepository;
-    private final RetrievalTraceRepository retrievalTraceRepository;
-    private final ToolTraceRepository toolTraceRepository;
-    private final UserRepository userRepository;
+    @Autowired
+    private ChatMemory chatMemory;
 
-    public ConversationService(ChatMemory chatMemory,
-                               ConversationRepository conversationRepository,
-                               MessageRepository messageRepository,
-                               ReasoningTraceRepository reasoningTraceRepository,
-                               RetrievalTraceRepository retrievalTraceRepository,
-                               ToolTraceRepository toolTraceRepository,
-                               UserRepository userRepository) {
-        this.chatMemory = chatMemory;
-        this.conversationRepository = conversationRepository;
-        this.messageRepository = messageRepository;
-        this.reasoningTraceRepository = reasoningTraceRepository;
-        this.retrievalTraceRepository = retrievalTraceRepository;
-        this.toolTraceRepository = toolTraceRepository;
-        this.userRepository = userRepository;
-    }
+    @Autowired
+    private ConversationRepository conversationRepository;
 
-    // -- Conversation management --
+    @Autowired
+    private MessageRepository messageRepository;
+
+    @Autowired
+    private ReasoningTraceRepository reasoningTraceRepository;
+
+    @Autowired
+    private RetrievalTraceRepository retrievalTraceRepository;
+
+    @Autowired
+    private ToolTraceRepository toolTraceRepository;
+
+    @Autowired
+    private UserRepository userRepository;
 
     public String resolveConversationId(String conversationId, String username) {
         UserEntity user = userRepository.findByUsername(username)
@@ -77,8 +70,6 @@ public class ConversationService {
         return conversationId;
     }
 
-    // -- Messages (ChatMemory) --
-
     /** 返回含 reasoning + retrieval trace 的完整消息历史 */
     public List<Map<String, Object>> getMessages(String conversationId) {
         List<MessageEntity> messages = messageRepository.findByConversationIdOrderByCreatedAtAsc(conversationId);
@@ -89,13 +80,11 @@ public class ConversationService {
             item.put("messageType", msg.getRole());
             item.put("text", msg.getContent());
 
-            // reasoning trace
             if ("ASSISTANT".equals(msg.getRole())) {
                 reasoningTraceRepository.findByMessageId(msg.getId())
                         .ifPresent(rt -> item.put("reasoning", rt.getContent()));
             }
 
-            // retrieval traces
             if ("USER".equals(msg.getRole())) {
                 List<RetrievalTrace> retrievals = retrievalTraceRepository.findByMessageId(msg.getId());
                 if (!retrievals.isEmpty()) {
@@ -111,7 +100,6 @@ public class ConversationService {
                     item.put("retrievalTraces", rtList);
                 }
             }
-
             result.add(item);
         }
         return result;
@@ -125,14 +113,11 @@ public class ConversationService {
         messageRepository.save(new MessageEntity(id, conversationId, "ASSISTANT", content));
     }
 
-    // -- Traces --
-
     public void saveReasoningTrace(String id, String messageId, String conversationId, String content) {
         reasoningTraceRepository.save(new ReasoningTrace(id, messageId, conversationId, content));
     }
 
-    public void saveRetrievalTraces(String messageId, String conversationId,
-                                     List<Map<String, Object>> traces) {
+    public void saveRetrievalTraces(String messageId, String conversationId, List<Map<String, Object>> traces) {
         for (Map<String, Object> t : traces) {
             String tid = UUID.randomUUID().toString();
             RetrievalTrace rt = new RetrievalTrace();
@@ -160,13 +145,10 @@ public class ConversationService {
         }
     }
 
-    // -- Listing --
-
     public List<Map<String, String>> listConversations(String username) {
         UserEntity user = userRepository.findByUsername(username).orElse(null);
         if (user == null) return List.of();
-        List<ConversationEntity> entities =
-                conversationRepository.findByUserIdOrderByCreatedAtDesc(user.getId());
+        List<ConversationEntity> entities = conversationRepository.findByUserIdOrderByCreatedAtDesc(user.getId());
         List<Map<String, String>> result = new ArrayList<>();
         for (ConversationEntity entity : entities) {
             Map<String, String> item = new LinkedHashMap<>();
