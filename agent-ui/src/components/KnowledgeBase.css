@@ -11,19 +11,19 @@
 .kb-drop-text { font-size: 14px; color: #334155; font-weight: 500; }
 .kb-drop-hint { font-size: 12px; color: #94a3b8; }
 
-/* 上传进度 — 浮层，不挤占文档流 */
+/* 上传进度 — 紧跟上传区下方，自然过渡 */
 .kb-uploading {
-  position: fixed; top: 0; left: 50%; transform: translateX(-50%); z-index: 50;
-  display: flex; flex-direction: column; gap: 4px; padding-top: 12px;
-  min-width: 400px;
+  display: flex; flex-direction: column; gap: 6px;
+  margin-bottom: 14px;
 }
 .kb-upload-item {
-  display: flex; align-items: center; gap: 8px; padding: 10px 18px;
-  background: #fff; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.12);
-  font-size: 13px; color: #334155;
+  display: flex; align-items: center; gap: 8px; padding: 8px 14px;
+  background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px;
+  font-size: 13px; color: #166534;
 }
-.kb-upload-ok { color: #16a34a; }
-.kb-upload-err { color: #ef4444; }
+.kb-upload-err {
+  background: #fef2f2; border-color: #fecaca; color: #ef4444;
+}
 .kb-upload-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kb-upload-msg { font-size: 11px; color: #ef4444; }
 .kb-spinner { width: 14px; height: 14px; border: 2px solid #e2e8f0; border-top-color: #4f46e5; border-radius: 50%; animation: kb-spin 0.7s linear infinite; flex-shrink: 0; }
@@ -48,7 +48,7 @@
 /* 列表头 */
 .kb-list-head { display: grid; grid-template-columns: 28px 1fr 70px 95px 60px 80px; gap: 8px; align-items: center; padding: 6px 12px; font-size: 11px; color: #94a3b8; font-weight: 600; border-bottom: 1px solid #e2e8f0; }
 
-/* 列表行 */
+/* 列表 */
 .kb-list { display: flex; flex-direction: column; contain: layout; }
 .kb-row { display: grid; grid-template-columns: 28px 1fr 70px 95px 60px 80px; gap: 8px; align-items: center; padding: 9px 12px; border-bottom: 1px solid #f1f5f9; transition: background 0.1s; }
 .kb-row:hover { background: #f8fafc; }

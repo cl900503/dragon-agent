@@ -147,9 +147,10 @@ export default function KnowledgeBase({ documents, onDocumentsChange }: Props) {
           onChange={e => { if (e.target.files) { handleFiles(e.target.files); e.target.value = '' } }} />
       </div>
 
+      {/* 上传进度 — 紧跟上传区 */}
       <div className="kb-uploading">
         {uploading.map((t, i) => (
-          <div key={i} className={`kb-upload-item ${t.done ? (t.error ? 'kb-upload-err' : 'kb-upload-ok') : ''}`}>
+          <div key={i} className={`kb-upload-item${t.done ? (t.error ? ' kb-upload-err' : '') : ''}`}>
             {t.done ? (t.error ? '✕' : '✓') : <span className="kb-spinner" />}
             <span className="kb-upload-name">{t.name}</span>
             {t.error && <span className="kb-upload-msg">{t.error}</span>}
