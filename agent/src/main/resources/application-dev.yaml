@@ -3,6 +3,10 @@
 # 激活方式: spring.profiles.active=dev
 # ============================================================
 
+app:
+  auth:
+    token-secret: dragon-agent-dev-only
+
 spring:
   # MySQL 数据源——开发环境使用本地数据库
   datasource:
