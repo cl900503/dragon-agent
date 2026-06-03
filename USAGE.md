@@ -247,7 +247,6 @@ SSE 事件类型：`thinking` (DeepSeek R1 推理), `content` (正文 token), `d
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | POST | /api/documents/test-retrieval | 检索测试 { query } → 返回 chunk 列表 + 分数 + 上下文 |
-| POST | /api/documents/eval-dataset | 批量评测 { questions: [] } → 返回每个问题的检索结果 |
 
 ---
 
@@ -257,10 +256,6 @@ SSE 事件类型：`thinking` (DeepSeek R1 推理), `content` (正文 token), `d
 dragon-agent/
 ├── docker-compose.yml              # MySQL + etcd + Milvus + MinIO + TEI
 ├── USAGE.md                        # 本文档
-├── eval/                           # RAG 评测工具
-│   ├── ragas_eval.py               # Ragas 评测脚本
-│   ├── eval_questions.json         # 评测集模板
-│   └── requirements.txt            # Python 依赖
 ├── agent/                          # Spring Boot 后端
 │   ├── pom.xml
 │   └── src/main/
@@ -344,26 +339,7 @@ dragon-agent/
 
 ## RAG 评测
 
-### 前端内置评测
-
-在 RAG 检索调试面板中直接输入查询，查看检索结果和相似度分数。
-
-### Ragas 评测
-
-```bash
-cd eval
-pip install -r requirements.txt
-
-# 准备评测集（编辑 eval_questions.json）
-# 从浏览器获取 SESSION Cookie
-
-python ragas_eval.py \
-  --api-url http://localhost:8080 \
-  --cookie "SESSION=xxx" \
-  --eval-set eval_questions.json
-```
-
-评测指标：context_precision, context_recall, faithfulness, answer_relevancy。
+在 RAG 检索调试面板（左侧导航 → 工具 → RAG 检索调试）中直接输入查询，查看检索耗时、相似度分数、LLM 上下文和原始 JSON 响应。
 
 ---
 

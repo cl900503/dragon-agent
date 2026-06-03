@@ -168,29 +168,6 @@ public class DocumentController {
         }).subscribeOn(Schedulers.boundedElastic());
     }
 
-    /** RAG 评测数据导出——批量返回 question + context + answer */
-    @PostMapping("/eval-dataset")
-    public Mono<ResponseEntity<List<Map<String, Object>>>> evalDataset(
-            @RequestBody Map<String, Object> body) {
-        if (documentService == null) {
-            return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(List.of()));
-        }
-        @SuppressWarnings("unchecked")
-        List<String> questions = (List<String>) body.getOrDefault("questions", List.of());
-        return Mono.fromCallable(() -> {
-            List<Map<String, Object>> results = new ArrayList<>();
-            for (String q : questions) {
-                var rag = documentService.retrieveContext(q);
-                Map<String, Object> item = new java.util.LinkedHashMap<>();
-                item.put("question", q);
-                item.put("contexts", rag.isEmpty() ? List.of()
-                        : rag.traces().stream().map(t -> t.get("contentSnippet")).toList());
-                results.add(item);
-            }
-            return ResponseEntity.ok(results);
-        }).subscribeOn(Schedulers.boundedElastic());
-    }
-
     @GetMapping("/{id}/download")
     public Mono<ResponseEntity<InputStreamResource>> download(@PathVariable String id) {
         if (documentService == null) {
