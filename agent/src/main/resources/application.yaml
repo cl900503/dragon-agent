@@ -91,7 +91,6 @@ app:
     top-k: 5
     # BGE-M3 语义 Embedding，分数范围 0.3-0.8
     similarity-threshold: 0.2
-    vector-store-file: ${VECTOR_STORE_FILE:./data/vector-store.json}
 
 # Actuator 健康检查——仅暴露 health 端点
 management:
