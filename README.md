@@ -10,7 +10,7 @@
 - **四大 Trace 追溯**：ChatMemory / ReasoningTrace / RetrievalTrace / ToolTrace 完整审计链路
 - **用户认证**：注册/登录/退出，BCrypt 加密，WebSession + AUTH_TOKEN HMAC 双重会话管理
 - **企业级基础设施**：MinIO 对象存储 + Milvus 向量数据库 + MySQL 关系数据库 + Docker Compose 一键部署
-- **开发工具**：RAG 检索调试面板、Markdown 渲染测试、Ragas 评测脚本
+- **开发工具**：RAG 检索调试面板、Markdown 渲染测试
 
 ## 技术栈
 
@@ -68,9 +68,9 @@ cd agent-ui && npm install && npm run dev
 
 ```
 dragon-agent/
-├── docker-compose.yml          # 基础设施编排
+├── docker-compose.yml          # 基础设施编排（MySQL + etcd + Milvus + MinIO + TEI + Attu）
 ├── USAGE.md                    # 详细使用文档
-├── eval/                       # Ragas 评测脚本
+├── README.md                   # 本文档
 ├── agent/                      # Spring Boot 后端
 │   └── src/main/java/com/dragon/agent/
 │       ├── config/             # Security, CORS, MinIO, RAG
