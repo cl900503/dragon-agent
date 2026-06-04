@@ -7,6 +7,8 @@ import QuestionNav from './components/QuestionNav'
 import LoginPage from './components/LoginPage'
 import KnowledgeBase from './components/KnowledgeBase'
 import RagTest from './components/RagTest'
+import AdminPanel from './components/AdminPanel'
+import ToastContainer from './components/Toast'
 import { useAuth } from './hooks/useAuth'
 import { useConversation } from './hooks/useConversation'
 import { fetchDocuments } from './api'
@@ -21,7 +23,7 @@ function isNearBottom(el: HTMLElement) {
 }
 
 export default function App() {
-  const { isLoggedIn, username, authLoading, handleLogin, handleLogout: authHandleLogout } = useAuth()
+  const { isLoggedIn, username, role, perms, authLoading, handleLogin, handleLogout: authHandleLogout } = useAuth()
   const {
     messages, streaming, error, activeConversationId, conversations,
     handleSend, handleNewChat, handleSelectConversation,
@@ -36,6 +38,10 @@ export default function App() {
   const [activity, setActivity] = useState<ActivityView>('chat')
   const [ragEnabled, setRagEnabled] = useState(true)
   const [activeDevTool, setActiveDevTool] = useState('rag')
+  const [activeKbId, setActiveKbId] = useState('')
+  const [selectedKbInfo, setSelectedKbInfo] = useState<import('./api').KbInfo | null>(null)
+  const [activeAdminDept, setActiveAdminDept] = useState('')
+  const [adminRefreshKey, setAdminRefreshKey] = useState(0)
 
   const areaRef = useRef<HTMLDivElement>(null)
   const pinnedRef = useRef(true)
@@ -46,13 +52,15 @@ export default function App() {
   }, [messages])
 
   useEffect(() => {
-    if (isLoggedIn) { fetchDocuments().then(setDocuments).catch(() => {}) }
-    else { setDocuments([]) }
-  }, [isLoggedIn])
+    if (isLoggedIn) {
+      fetchDocuments(activeKbId || undefined).then(setDocuments).catch(() => {})
+    } else { setDocuments([]) }
+  }, [isLoggedIn, activeKbId])
 
   const devView = activity === 'devtools'
   const kbView = activity === 'kb'
-  const showWelcome = !kbView && !devView && messages.length === 0
+  const adminView = activity === 'admin'
+  const showWelcome = !kbView && !devView && !adminView && messages.length === 0
 
   useEffect(() => {
     const el = areaRef.current; if (!el) return
@@ -117,6 +125,7 @@ export default function App() {
 
   return (
     <div className="app-layout">
+      <ToastContainer />
       <ActivityBar active={activity} onChange={handleActivity} />
 
       <Sidebar
@@ -124,15 +133,22 @@ export default function App() {
         activeId={activeConversationId}
         collapsed={sidebarCollapsed}
         username={username}
+        perms={perms}
         kbActive={kbView}
         devActive={devView}
+        adminActive={adminView}
         activeDevTool={activeDevTool}
+        activeKbId={activeKbId}
         onSelect={handleSelectAndSwitch}
         onDelete={handleDeleteConversation}
         onNewChat={handleNewChatAndSwitch}
         onToggle={() => setSidebarCollapsed(v => !v)}
         onLogout={handleLogout}
         onDevToolSelect={setActiveDevTool}
+        onKbSelect={(id, info) => { setActiveKbId(id); setSelectedKbInfo(info || null) }}
+        onAdminSelect={setActiveAdminDept}
+        activeAdminDept={activeAdminDept}
+        onDeptChange={() => setAdminRefreshKey(k => k + 1)}
       />
 
       <div className="app">
@@ -146,7 +162,9 @@ export default function App() {
         )}
 
         {kbView ? (
-          <KnowledgeBase documents={documents} onDocumentsChange={setDocuments} />
+          <KnowledgeBase documents={documents} onDocumentsChange={setDocuments} activeKbId={activeKbId} currentUsername={username || ''} canUpload={selectedKbInfo?.canUpload} />
+        ) : adminView ? (
+          <AdminPanel activeDept={activeAdminDept} perms={perms} currentUsername={username || ''} refreshKey={adminRefreshKey} />
         ) : devView ? (
           activeDevTool === 'markdown' ? (
             <div className="chat-scroll"><div className="chat-area chat-area--test">

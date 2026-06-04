@@ -1,0 +1,53 @@
+.kb-list-err { display: flex; align-items: center; justify-content: space-between; padding: 6px 12px; margin: 8px 8px 0; background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; font-size: 12px; color: #dc2626; }
+.kb-list-err button { border: none; background: none; color: #dc2626; cursor: pointer; }
+
+.kb-add-btn {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  margin: 0 4px 8px; padding: 10px;
+  border: 1px solid #e2e8f0; border-radius: 8px; background: #fff;
+  color: #334155; font-size: 13px; font-weight: 500; cursor: pointer;
+  font-family: inherit; transition: all 0.15s;
+}
+.kb-add-btn:hover { border-color: #4f46e5; color: #4f46e5; background: #eef2ff; }
+
+/* 新建知识库弹窗 */
+.kb-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 200; display: flex; align-items: center; justify-content: center; }
+.kb-modal-create { background: #fff; border-radius: 14px; width: 440px; box-shadow: 0 12px 40px rgba(0,0,0,0.15); }
+.kb-modal-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 24px 14px; }
+.kb-modal-head h3 { margin: 0; font-size: 16px; color: #1e293b; }
+.kb-modal-head button { border: none; background: none; font-size: 18px; color: #94a3b8; cursor: pointer; }
+.kb-modal-body { padding: 0 24px 18px; display: flex; flex-direction: column; gap: 14px; }
+.kb-modal-err { padding: 8px 12px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; font-size: 13px; color: #dc2626; }
+.kb-modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 24px 18px; border-top: 1px solid #f1f5f9; }
+.kb-modal-foot .admin-btn { padding: 8px 18px; border: none; border-radius: 8px; background: #4f46e5; color: #fff; font-size: 13px; cursor: pointer; font-family: inherit; }
+.kb-modal-foot .admin-btn:hover { background: #4338ca; }
+.kb-modal-foot .admin-btn-cancel { padding: 8px 18px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; color: #64748b; font-size: 13px; cursor: pointer; font-family: inherit; }
+
+/* 弹窗内表单复用 */
+.kb-modal-create .admin-field { display: flex; flex-direction: column; gap: 4px; }
+.kb-modal-create .admin-field label { font-size: 12px; color: #64748b; font-weight: 500; }
+.kb-modal-create .admin-req { color: #ef4444; }
+.kb-modal-create .admin-field input, .kb-modal-create .admin-field select { padding: 9px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px; font-family: inherit; outline: none; }
+.kb-modal-create .admin-field input:focus, .kb-modal-create .admin-field select:focus { border-color: #4f46e5; }
+.kb-modal-create .admin-row-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.kb-list-empty { padding: 20px 12px; text-align: center; color: #94a3b8; font-size: 13px; }
+
+.kb-list-item { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; margin: 1px 0; border-radius: 8px; cursor: pointer; transition: background 0.12s; }
+.kb-list-item:hover { background: #e2e8f0; }
+.kb-list-item.active { background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+.kb-list-item.active .kb-list-name { color: #4f46e5; font-weight: 600; }
+.kb-list-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+.kb-list-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.kb-list-top { display: flex; align-items: center; gap: 6px; }
+.kb-list-name { font-size: 13px; color: #334155; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kb-list-vis { font-size: 10px; padding: 1px 6px; border-radius: 8px; font-weight: 600; flex-shrink: 0; }
+.vis-PRIVATE { background: #f1f5f9; color: #64748b; }
+.vis-DEPARTMENT { background: #dbeafe; color: #2563eb; }
+.vis-COMPANY { background: #ede9fe; color: #7c3aed; }
+.kb-list-desc { font-size: 11px; color: #94a3b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kb-list-meta { font-size: 10px; color: #c0c8d4; display: flex; align-items: center; }
+.kb-list-owner { color: #cbd5e1; }
+.kb-list-del { flex-shrink: 0; background: none; border: none; color: #94a3b8; cursor: pointer; padding: 3px; border-radius: 4px; opacity: 0; transition: all 0.12s; margin-top: 1px; }
+.kb-list-item:hover .kb-list-del { opacity: 1; }
+.kb-list-del:hover { color: #ef4444; background: #fef2f2; }

@@ -1,0 +1,79 @@
+.admin-page { flex: 1; overflow-y: auto; padding: 24px 32px; max-width: 960px; margin: 0 auto; width: 100%; }
+.admin-page h2 { margin: 0; font-size: 20px; color: #1e293b; }
+.admin-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.admin-count { font-size: 13px; color: #94a3b8; }
+
+.admin-err { display: flex; align-items: center; justify-content: space-between; padding: 8px 14px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; margin-bottom: 14px; font-size: 13px; color: #dc2626; }
+.admin-err button { border: none; background: none; color: #dc2626; cursor: pointer; font-size: 14px; }
+
+/* 按钮 */
+.admin-btn { padding: 8px 18px; border: none; border-radius: 8px; background: #4f46e5; color: #fff; font-size: 13px; cursor: pointer; font-family: inherit; white-space: nowrap; }
+.admin-btn:hover { background: #4338ca; }
+.admin-btn-cancel { padding: 8px 18px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; color: #64748b; font-size: 13px; cursor: pointer; font-family: inherit; }
+
+/* 表格 */
+.admin-table-head {
+  display: grid;
+  grid-template-columns: 110px 100px 180px 100px 100px 60px 80px;
+  gap: 8px; align-items: center; padding: 8px 14px;
+  font-size: 12px; color: #94a3b8; font-weight: 600;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc; border-radius: 6px 6px 0 0;
+}
+.admin-table-body { display: flex; flex-direction: column; }
+.admin-table-row {
+  display: grid;
+  grid-template-columns: 110px 100px 180px 100px 100px 60px 80px;
+  gap: 8px; align-items: center; padding: 10px 14px;
+  border-bottom: 1px solid #f1f5f9; font-size: 13px; color: #334155;
+  transition: background 0.1s;
+}
+.admin-table-row:hover { background: #f8fafc; }
+
+.admin-col-user { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 4px; }
+.admin-col-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-col-email { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #64748b; font-size: 12px; }
+.admin-col-role { display: flex; }
+.admin-col-dept { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: #64748b; }
+.admin-col-status { display: flex; }
+.admin-col-act { display: flex; gap: 4px; justify-content: flex-end; }
+
+/* 标签 */
+.admin-role-badge { font-size: 10px; padding: 2px 8px; border-radius: 8px; font-weight: 600; white-space: nowrap; }
+.role-ADMIN { background: #ede9fe; color: #7c3aed; }
+.role-DEPT_ADMIN { background: #dbeafe; color: #2563eb; }
+.role-USER { background: #f1f5f9; color: #64748b; }
+.admin-self-tag { font-size: 10px; padding: 1px 5px; background: #eef2ff; color: #4f46e5; border-radius: 4px; font-weight: 600; flex-shrink: 0; }
+.admin-status-ok { font-size: 11px; color: #16a34a; }
+.admin-status-off { font-size: 11px; color: #ef4444; }
+.admin-empty { text-align: center; padding: 40px; color: #94a3b8; font-size: 13px; }
+
+/* 操作按钮 */
+.admin-act-btn { width: 26px; height: 26px; padding: 0; border: 1px solid #e2e8f0; border-radius: 5px; background: #fff; color: #64748b; font-size: 13px; cursor: pointer; font-family: inherit; display: inline-flex; align-items: center; justify-content: center; }
+.admin-act-btn:hover { background: #f1f5f9; color: #334155; }
+.admin-act-del { color: #94a3b8; }
+.admin-act-del:hover { background: #fef2f2; border-color: #fecaca; color: #ef4444; }
+
+/* 分页 */
+.admin-pager { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 16px 0; font-size: 13px; color: #64748b; }
+.admin-pager button { padding: 6px 14px; border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; color: #475569; font-size: 12px; cursor: pointer; font-family: inherit; }
+.admin-pager button:hover:not(:disabled) { background: #f1f5f9; border-color: #cbd5e1; }
+.admin-pager button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* 弹窗 */
+.admin-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 100; display: flex; align-items: center; justify-content: center; }
+.admin-modal { background: #fff; border-radius: 14px; width: 460px; max-height: 90vh; overflow-y: auto; box-shadow: 0 12px 40px rgba(0,0,0,0.15); }
+.admin-modal-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 24px 14px; }
+.admin-modal-head h3 { margin: 0; font-size: 16px; color: #1e293b; }
+.admin-modal-head button { border: none; background: none; font-size: 18px; color: #94a3b8; cursor: pointer; }
+.admin-modal-body { padding: 0 24px 18px; display: flex; flex-direction: column; gap: 14px; }
+.admin-modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 24px 18px; border-top: 1px solid #f1f5f9; }
+
+.admin-field { display: flex; flex-direction: column; gap: 4px; }
+.admin-field label { font-size: 12px; color: #64748b; font-weight: 500; }
+.admin-req { color: #ef4444; }
+.admin-field input, .admin-field select { padding: 9px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px; font-family: inherit; outline: none; }
+.admin-field input:focus, .admin-field select:focus { border-color: #4f46e5; }
+.admin-field input:disabled { background: #f8fafc; color: #94a3b8; }
+
+.admin-row-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }

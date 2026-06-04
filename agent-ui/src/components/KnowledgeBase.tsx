@@ -6,13 +6,17 @@
  */
 
 import { useState, useRef, useCallback, useMemo, type DragEvent, type ChangeEvent } from 'react'
-import { uploadFile, deleteDocument, retryDocument, getDocumentDownloadUrl } from '../api'
+import { uploadFileToKb, deleteDocument, retryDocument, getDocumentDownloadUrl } from '../api'
 import type { UploadedDocument } from '../types'
+import { showToast } from './Toast'
 import './KnowledgeBase.css'
 
 interface Props {
   documents: UploadedDocument[]
   onDocumentsChange: (docs: UploadedDocument[]) => void
+  activeKbId: string
+  currentUsername?: string
+  canUpload?: boolean
 }
 
 const PAGE_SIZE = 15
@@ -40,12 +44,16 @@ function statusText(s: string) {
   const m: Record<string, string> = { READY: '就绪', FAILED: '失败', INDEXING: '索引中', PARSING: '解析中', UPLOADING: '上传中' }
   return m[s] || s
 }
+function mimeShort(mime: string): string {
+  const m: Record<string, string> = { 'application/pdf': 'PDF', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'Word', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'Excel', 'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'PPT', 'text/plain': '文本', 'text/markdown': 'MD', 'text/csv': 'CSV', 'application/json': 'JSON' }
+  return m[mime] || mime.split('/').pop()?.slice(0, 6) || mime
+}
 function typeMatch(mime: string, filter: string): boolean {
   if (!filter) return true
   return mime.toLowerCase().includes(filter.toLowerCase())
 }
 
-export default function KnowledgeBase({ documents, onDocumentsChange }: Props) {
+export default function KnowledgeBase({ documents, onDocumentsChange, activeKbId, currentUsername, canUpload }: Props) {
   const [dragOver, setDragOver] = useState(false)
   const [uploading, setUploading] = useState<{ name: string; done: boolean; error?: string }[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -63,7 +71,7 @@ export default function KnowledgeBase({ documents, onDocumentsChange }: Props) {
     const newDocs: UploadedDocument[] = []
     await Promise.all(Array.from(files).map(async (file, i) => {
       try {
-        const d = await uploadFile(file)
+        const d = await uploadFileToKb(file, activeKbId || undefined)
         newDocs.push(d)
         setUploading(p => p.map((t, j) => j === i ? { ...t, done: true } : t))
       } catch (err) {
@@ -73,22 +81,30 @@ export default function KnowledgeBase({ documents, onDocumentsChange }: Props) {
     }))
     if (newDocs.length > 0) onDocumentsChange([...newDocs, ...documents])
     setTimeout(() => setUploading([]), 3000)
-  }, [documents, onDocumentsChange])
+  }, [documents, onDocumentsChange, activeKbId])
 
   const onDragOver = (e: DragEvent) => { e.preventDefault(); setDragOver(true) }
   const onDragLeave = (e: DragEvent) => { e.preventDefault(); setDragOver(false) }
   const onDrop = (e: DragEvent) => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files) }
 
   const handleDelete = async (id: string) => {
-    onDocumentsChange(documents.filter(d => d.id !== id))
-    setSelected(prev => { const n = new Set(prev); n.delete(id); return n })
-    try { await deleteDocument(id) } catch { /* ok */ }
+    try {
+      await deleteDocument(id)
+      onDocumentsChange(documents.filter(d => d.id !== id))
+      setSelected(prev => { const n = new Set(prev); n.delete(id); return n })
+      showToast('文档已删除', 'success')
+    } catch (err) { showToast(err instanceof Error ? err.message : '删除失败') }
   }
   const batchDelete = async () => {
     if (selected.size === 0) return
+    let success = 0, fail = 0
+    for (const id of selected) {
+      try { await deleteDocument(id); success++ } catch { fail++ }
+    }
     onDocumentsChange(documents.filter(d => !selected.has(d.id)))
-    for (const id of selected) { try { await deleteDocument(id) } catch { /* ok */ } }
     setSelected(new Set())
+    if (fail > 0) showToast(`删除完成：${success} 成功, ${fail} 失败`)
+    else showToast(`已删除 ${success} 个文档`, 'success')
   }
   const handleRetry = async (id: string) => {
     try { await retryDocument(id); onDocumentsChange(documents.map(d => d.id === id ? { ...d, status: 'INDEXING' as const } : d))
@@ -104,6 +120,12 @@ export default function KnowledgeBase({ documents, onDocumentsChange }: Props) {
   // 筛选 + 排序 + 分页
   const filtered = useMemo(() => {
     let list = [...documents]
+    // 只显示当前 KB 的文档，未选 KB 不显示任何文档
+    if (activeKbId) {
+      list = list.filter(d => d.kbId === activeKbId)
+    } else {
+      list = []  // 未选知识库时为空的列表
+    }
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       list = list.filter(d => d.originalName.toLowerCase().includes(q))
@@ -115,7 +137,7 @@ export default function KnowledgeBase({ documents, onDocumentsChange }: Props) {
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     })
     return list
-  }, [documents, search, typeFilter, sort])
+  }, [documents, search, typeFilter, sort, activeKbId])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const safePage = Math.min(page, totalPages - 1)
@@ -128,6 +150,7 @@ export default function KnowledgeBase({ documents, onDocumentsChange }: Props) {
     <div className="kb-page">
       <div className="kb-top">
         <h2>知识库</h2>
+        {activeKbId && <span className="kb-tag">📂</span>}
         {documents.length > 0 && <span className="kb-summary">{ready}/{documents.length} 就绪 · {formatSize(totalSize)}</span>}
         <div className="kb-uploading">
           {uploading.map((t, i) => (
@@ -143,18 +166,34 @@ export default function KnowledgeBase({ documents, onDocumentsChange }: Props) {
 
       {error && <div className="kb-error"><span>{error}</span><button onClick={() => setError(null)}>✕</button></div>}
 
-      {/* 上传区 */}
-      <div className={`kb-drop${dragOver ? ' kb-drop-over' : ''}`}
-        onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} onClick={() => fileInputRef.current?.click()}>
-        <span className="kb-drop-icon">📤</span>
-        <span className="kb-drop-text">拖拽文件到此处或点击上传</span>
-        <span className="kb-drop-hint">支持 PDF、Word、Excel、PPT、TXT 等格式</span>
-        <input ref={fileInputRef} type="file" hidden multiple
-          accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.csv,.json,.java,.py,.c,.cpp,.js,.ts,.html,.css,.xml,.yaml,.yml,.log"
-          onChange={e => { if (e.target.files) { handleFiles(e.target.files); e.target.value = '' } }} />
-      </div>
+      {/* 上传区 —— 必须选中知识库且有上传权限 */}
+      {activeKbId && canUpload !== false ? (
+        <div className={`kb-drop${dragOver ? ' kb-drop-over' : ''}`}
+          onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} onClick={() => fileInputRef.current?.click()}>
+          <span className="kb-drop-icon">📤</span>
+          <span className="kb-drop-text">拖拽文件到此处或点击上传</span>
+          <span className="kb-drop-hint">支持 PDF、Word、Excel、PPT、TXT 等格式</span>
+          <input ref={fileInputRef} type="file" hidden multiple
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.csv,.json,.java,.py,.c,.cpp,.js,.ts,.html,.css,.xml,.yaml,.yml,.log"
+            onChange={e => { if (e.target.files) { handleFiles(e.target.files); e.target.value = '' } }} />
+        </div>
+      ) : activeKbId ? (
+        <div className="kb-drop kb-drop-disabled">
+          <span className="kb-drop-icon">🔒</span>
+          <span className="kb-drop-text">您没有上传权限</span>
+          <span className="kb-drop-hint">仅知识库所有者和管理员可上传文档</span>
+        </div>
+      ) : (
+        <div className="kb-drop kb-drop-disabled">
+          <span className="kb-drop-icon">📂</span>
+          <span className="kb-drop-text">请先在左侧选择或新建一个知识库</span>
+          <span className="kb-drop-hint">所有文档必须归属于一个知识库</span>
+        </div>
+      )}
 
-      {documents.length === 0 ? (
+      {!activeKbId ? (
+        <div className="kb-empty"><span className="kb-empty-icon">👈</span><p>选择左侧知识库开始管理文档</p></div>
+      ) : documents.length === 0 ? (
         <div className="kb-empty"><span className="kb-empty-icon">📭</span><p>知识库为空，上传文档后 AI 可在对话中检索</p></div>
       ) : (
         <>
@@ -183,26 +222,35 @@ export default function KnowledgeBase({ documents, onDocumentsChange }: Props) {
             <label className="kb-check"><input type="checkbox" checked={selected.size === paged.length && paged.length > 0}
               onChange={toggleAll} /></label>
             <span className="kb-col-name">文件名</span>
+            <span className="kb-col-type">类型</span>
             <span className="kb-col-size">大小</span>
-            <span className="kb-col-time">上传时间</span>
+            <span className="kb-col-chunks">分块</span>
+            <span className="kb-col-uploader">上传者</span>
+            <span className="kb-col-kb">知识库</span>
+            <span className="kb-col-time">时间</span>
             <span className="kb-col-status">状态</span>
             <span className="kb-col-act">操作</span>
           </div>
 
           {/* 列表 */}
           <div className="kb-list">
-            {paged.map(doc => (
+            {paged.map(doc => {
+              return (
               <div key={doc.id} className={`kb-row${selected.has(doc.id) ? ' kb-row-sel' : ''}`}>
                 <label className="kb-check"><input type="checkbox" checked={selected.has(doc.id)}
                   onChange={() => toggleSelect(doc.id)} /></label>
                 <span className="kb-col-name">
                   <span className="kb-row-name" title={doc.originalName}>{doc.originalName}</span>
-                  {doc.chunkCount > 0 && <span className="kb-row-chunks">{doc.chunkCount} 块</span>}
                 </span>
+                <span className="kb-col-type">{mimeShort(doc.mimeType)}</span>
                 <span className="kb-col-size">{formatSize(doc.fileSize)}</span>
+                <span className="kb-col-chunks">{doc.chunkCount > 0 ? doc.chunkCount : '-'}</span>
+                <span className="kb-col-uploader" title={doc.uploaderName}>{doc.uploaderName || '-'}</span>
+                <span className="kb-col-kb" title={doc.kbName}>{doc.kbName || '-'}</span>
                 <span className="kb-col-time">{fmtDate(doc.createdAt)}</span>
                 <span className="kb-col-status">
-                  <span className={`kb-badge ${doc.status === 'READY' ? 'kb-badge-ok' : doc.status === 'FAILED' ? 'kb-badge-err' : 'kb-badge-busy'}`}>
+                  <span className={`kb-badge ${doc.status === 'READY' ? 'kb-badge-ok' : doc.status === 'FAILED' ? 'kb-badge-err' : 'kb-badge-busy'}`}
+                    title={doc.errorMessage || ''}>
                     {statusText(doc.status)}
                   </span>
                 </span>
@@ -215,7 +263,9 @@ export default function KnowledgeBase({ documents, onDocumentsChange }: Props) {
                     </>
                   )}
                   {doc.status === 'FAILED' && <button className="kb-act kb-retry" onClick={() => handleRetry(doc.id)} title="重试">↻</button>}
-                  <button className="kb-act kb-del" onClick={() => handleDelete(doc.id)} title="删除">✕</button>
+                  {doc.canDelete && (
+                    <button className="kb-act kb-del" onClick={() => handleDelete(doc.id)} title="删除">✕</button>
+                  )}
                 </span>
                 {expandedId === doc.id && doc.chunkCount > 0 && (
                   <div className="kb-chunks">
@@ -228,7 +278,8 @@ export default function KnowledgeBase({ documents, onDocumentsChange }: Props) {
                   </div>
                 )}
               </div>
-            ))}
+            )
+            })}
           </div>
 
           {/* 分页 */}

@@ -40,10 +40,20 @@ public class UserService {
      *             用户名已存在
      */
     public UserDetails register(String username, String rawPassword) {
+        return register(username, rawPassword, null, null, null, null);
+    }
+
+    public UserDetails register(String username, String rawPassword, String displayName, String email, String role,
+            Long departmentId) {
         if (userRepository.existsByUsername(username)) {
             throw new UsernameAlreadyExistsException("用户名 '" + username + "' 已存在");
         }
         UserEntity entity = new UserEntity(username, encoder.encode(rawPassword));
+        entity.setDisplayName(displayName);
+        entity.setEmail(email);
+        entity.setRole(role != null ? role : "USER");
+        entity.setDepartmentId(departmentId);
+        entity.setStatus("ACTIVE");
         userRepository.save(entity);
         return User.builder().username(username).password(entity.getPasswordHash()).authorities("ROLE_USER").build();
     }

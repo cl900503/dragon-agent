@@ -15,15 +15,15 @@ import com.dragon.agent.entity.DocumentEntity;
  */
 public interface DocumentRepository extends JpaRepository<DocumentEntity, String> {
 
-    /** 按用户和会话查询文档列表（按创建时间倒序） */
-    List<DocumentEntity> findByUserIdAndConversationIdOrderByCreatedAtDesc(Long userId, String conversationId);
+    /** 按知识库查询文档 */
+    List<DocumentEntity> findByKbIdOrderByCreatedAtDesc(String kbId);
 
-    /** 按用户查询无会话关联的文档 */
-    List<DocumentEntity> findByUserIdAndConversationIdIsNullOrderByCreatedAtDesc(Long userId);
+    /** 按用户查询所有文档 */
+    List<DocumentEntity> findByUserIdOrderByCreatedAtDesc(Long userId);
 
     /** 按文档 ID 和用户 ID 查询（所有权验证） */
     Optional<DocumentEntity> findByIdAndUserId(String id, Long userId);
 
-    /** 删除指定会话下的所有文档 */
-    void deleteByConversationId(String conversationId);
+    /** 统计知识库下的文档数量 */
+    long countByKbId(String kbId);
 }

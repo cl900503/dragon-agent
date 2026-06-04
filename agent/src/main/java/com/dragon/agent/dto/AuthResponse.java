@@ -6,5 +6,8 @@ package com.dragon.agent.dto;
  * @author 陈龙
  * @since 2026-06-01
  */
-public record AuthResponse(String username, String message) {
+public record AuthResponse(String username, String role, String message) {
+    public AuthResponse(String username, String message) {
+        this(username, null, message);
+    }
 }

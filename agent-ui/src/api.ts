@@ -201,44 +201,80 @@ export async function deleteConversation(id: string): Promise<void> {
 export async function uploadFile(file: File): Promise<UploadedDocument> {
   const formData = new FormData()
   formData.append('file', file)
-
-  const res = await fetch('/api/documents/upload', {
-    method: 'POST',
-    body: formData,
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ message: '上传失败' }))
-    throw new Error(err.message || `HTTP ${res.status}`)
-  }
+  const res = await fetch('/api/documents/upload', { method: 'POST', body: formData })
+  if (!res.ok) throw new Error(await errMsg(res))
   return res.json()
 }
 
-/** 获取资料库全部文档 */
-export async function fetchDocuments(): Promise<UploadedDocument[]> {
-  const res = await fetch('/api/documents')
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+/** 获取文档（可指定知识库） */
+export async function fetchDocuments(kbId?: string): Promise<UploadedDocument[]> {
+  const url = kbId ? `/api/documents?kbId=${encodeURIComponent(kbId)}` : '/api/documents'
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(await errMsg(res))
   return res.json()
 }
 
 /** 删除指定文档 */
 export async function deleteDocument(id: string): Promise<void> {
-  const res = await fetch(`/api/documents/${encodeURIComponent(id)}`, {
-    method: 'DELETE',
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ message: '删除失败' }))
-    throw new Error(err.message || `HTTP ${res.status}`)
-  }
+  const res = await fetch(`/api/documents/${encodeURIComponent(id)}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(await errMsg(res))
 }
 
 /** 重试处理失败文档 */
 export async function retryDocument(id: string): Promise<void> {
   const res = await fetch(`/api/documents/${encodeURIComponent(id)}/retry`, { method: 'POST' })
-  if (!res.ok) throw new Error('重试失败')
+  if (!res.ok) throw new Error(await errMsg(res))
+}
+
+/** 上传文件到资料库（可指定知识库） */
+export async function uploadFileToKb(file: File, kbId?: string): Promise<UploadedDocument> {
+  const formData = new FormData()
+  formData.append('file', file)
+  const params = kbId ? `?kbId=${encodeURIComponent(kbId)}` : ''
+  const res = await fetch('/api/documents/upload' + params, { method: 'POST', body: formData })
+  if (!res.ok) throw new Error(await errMsg(res))
+  return res.json()
 }
 
 /** 获取文档下载 URL */
 export function getDocumentDownloadUrl(id: string): string {
   return `/api/documents/${encodeURIComponent(id)}/download`
+}
+
+// ---- 通用错误解析 ----
+async function errMsg(res: Response): Promise<string> {
+  try {
+    const body = await res.json()
+    return body.error || body.message || `HTTP ${res.status}`
+  } catch {
+    return `HTTP ${res.status}`
+  }
+}
+
+// ---- 知识库管理 API ----
+
+export interface KbInfo {
+  id: string; name: string; description: string; visibility: string; ownerId: number; ownerName?: string; departmentId: number | null; departmentName?: string; docCount?: number; createdAt: string
+}
+
+export async function fetchKnowledgeBases(): Promise<KbInfo[]> {
+  const res = await fetch('/api/kb')
+  if (!res.ok) throw new Error(await errMsg(res))
+  return res.json()
+}
+
+export async function createKnowledgeBase(body: Record<string, unknown>): Promise<KbInfo> {
+  const res = await fetch('/api/kb', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(await errMsg(res))
+  return res.json() as any
+}
+
+export async function deleteKnowledgeBase(id: string): Promise<void> {
+  const res = await fetch(`/api/kb/${encodeURIComponent(id)}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(await errMsg(res))
 }
 

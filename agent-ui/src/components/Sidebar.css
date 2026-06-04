@@ -42,6 +42,7 @@
 .conversation-list {
   flex: 1; overflow-y: auto; padding: 0 8px 8px;
   scrollbar-width: thin; scrollbar-color: #d1d5db transparent;
+  display: flex; flex-direction: column;
 }
 .no-conversations {
   padding: 24px 12px; text-align: center;
@@ -67,6 +68,13 @@
 }
 .conversation-item:hover .conv-delete { opacity: 1; }
 .conv-delete:hover { color: #ef4444; background: #fef2f2; }
+.conv-edit {
+  flex-shrink: 0; background: none; border: none; color: #94a3b8;
+  cursor: pointer; padding: 3px; border-radius: 4px; opacity: 0;
+  transition: all 0.12s; display: flex; font-size: 13px;
+}
+.conversation-item:hover .conv-edit { opacity: 1; }
+.conv-edit:hover { color: #4f46e5; background: #eef2ff; }
 
 .sidebar-footer {
   display: flex; align-items: center; gap: 8px;
@@ -88,3 +96,31 @@
   transition: all 0.15s;
 }
 .footer-logout:hover { color: #ef4444; background: #fef2f2; }
+
+/* 管理员部门列表 */
+.conversation-item.admin-all { font-weight: 600; border-bottom: 1px solid #e2e8f0; border-radius: 0; margin-bottom: 4px; padding-bottom: 12px; }
+.conversation-item.admin-dept { padding-left: 24px; font-size: 12px; }
+.conversation-item.admin-dept .conv-title { font-size: 12px; }
+
+.admin-new-dept-inline {
+  display: flex; gap: 6px; align-items: center;
+  margin: 0 12px 8px; padding: 10px; height: 42px; box-sizing: border-box;
+  border: 1px solid #4f46e5; border-radius: 8px; background: #fff;
+}
+.admin-new-dept-inline input { flex: 1; border: none; outline: none; font-size: 13px; font-family: inherit; }
+.admin-new-dept-inline button { border: none; background: none; font-size: 16px; cursor: pointer; padding: 2px 4px; color: #94a3b8; }
+.admin-new-dept-inline button:first-of-type { color: #16a34a; }
+
+/* 删除确认弹窗 */
+.confirm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 200; display: flex; align-items: center; justify-content: center; }
+.confirm-dialog { background: #fff; border-radius: 16px; width: 380px; padding: 28px 28px 22px; text-align: center; box-shadow: 0 16px 48px rgba(0,0,0,0.18); }
+.confirm-icon { font-size: 40px; margin-bottom: 8px; }
+.confirm-icon-circle { width: 52px; height: 52px; border-radius: 50%; background: #fef2f2; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px; }
+.confirm-dialog h3 { margin: 0 0 4px; font-size: 17px; color: #1e293b; }
+.confirm-msg { margin: 0; font-size: 14px; color: #475569; line-height: 1.5; }
+.confirm-msg strong { color: #1e293b; }
+.confirm-warn { margin: 12px 0 0; padding: 10px 14px; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px; font-size: 13px; color: #92400e; line-height: 1.5; }
+.confirm-hint { margin: 10px 0 0; font-size: 12px; color: #94a3b8; }
+.confirm-actions { display: flex; gap: 10px; justify-content: center; margin-top: 18px; }
+.confirm-actions .admin-btn { padding: 9px 28px; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; font-family: inherit; color: #fff; font-weight: 500; }
+.confirm-actions .admin-btn-cancel { padding: 9px 22px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; color: #64748b; font-size: 14px; cursor: pointer; font-family: inherit; }

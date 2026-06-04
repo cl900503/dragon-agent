@@ -3,7 +3,7 @@ import { login, register } from '../auth'
 import './LoginPage.css'
 
 interface Props {
-  onLogin: (username: string) => void
+  onLogin: (username: string, role?: string) => void
 }
 
 interface FieldErrors {
@@ -12,9 +12,7 @@ interface FieldErrors {
 }
 
 /**
- * 登录/注册页面——支持切换模式，成功后回调 onLogin。
- *
- * 校验提示采用自定义 inline 风格，与整体 UI 统一。
+ * 登录页面——账号由管理员统一分配。
  *
  * @author 陈龙
  * @since 2026-06-01
@@ -29,18 +27,10 @@ export default function LoginPage({ onLogin }: Props) {
 
   function validate(): boolean {
     const errs: FieldErrors = {}
-    const u = username.trim()
-    const p = password
-    if (!u) {
-      errs.username = '请输入用户名'
-    } else if (u.length < 2) {
-      errs.username = '用户名至少 2 个字符'
-    }
-    if (!p) {
-      errs.password = '请输入密码'
-    } else if (p.length < 4) {
-      errs.password = '密码至少 4 个字符'
-    }
+    if (!username.trim()) errs.username = '请输入用户名'
+    else if (username.trim().length < 2) errs.username = '用户名至少 2 个字符'
+    if (!password) errs.password = '请输入密码'
+    else if (password.length < 4) errs.password = '密码至少 4 个字符'
     setFieldErrors(errs)
     return Object.keys(errs).length === 0
   }
@@ -48,30 +38,28 @@ export default function LoginPage({ onLogin }: Props) {
   function clearFieldError(field: keyof FieldErrors) {
     setFieldErrors(prev => {
       if (!prev[field]) return prev
-      const next = { ...prev }
-      delete next[field]
-      return next
+      const next = { ...prev }; delete next[field]; return next
     })
   }
 
   async function handleSubmit(e: FormEvent) {
-    e.preventDefault()
-    setError(null)
+    e.preventDefault(); setError(null)
     if (!validate()) return
     setLoading(true)
     try {
       const fn = mode === 'login' ? login : register
       const result = await fn(username.trim(), password)
       if (result.username) {
-        onLogin(result.username)
-      } else {
-        setError(result.message)
-      }
+          onLogin(result.username, result.role || undefined)
+        } else {
+          const msg = result.message || ''
+          setError(msg.includes('管理面板')
+            ? '系统已由管理员接管，新账号请联系管理员创建'
+            : msg || '操作失败')
+        }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '操作失败')
-    } finally {
-      setLoading(false)
-    }
+    } finally { setLoading(false) }
   }
 
   return (
@@ -107,7 +95,7 @@ export default function LoginPage({ onLogin }: Props) {
               value={password}
               onChange={e => { setPassword(e.target.value); clearFieldError('password') }}
               onBlur={() => { if (password) clearFieldError('password') }}
-              autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+              autoComplete="current-password"
               className={fieldErrors.password ? 'input-error' : ''}
             />
             <span className={`field-hint${fieldErrors.password ? ' field-hint--error' : ''}`}>
@@ -119,12 +107,9 @@ export default function LoginPage({ onLogin }: Props) {
           </button>
         </form>
         <p className="login-switch">
-          {mode === 'login' ? '还没有账号？' : '已有账号？'}
-          <button
-            type="button"
-            onClick={() => { setMode(m => m === 'login' ? 'register' : 'login'); setError(null); setFieldErrors({}) }}
-          >
-            {mode === 'login' ? '注册' : '登录'}
+          {mode === 'login' ? '首次使用？' : '已有账号？'}
+          <button type="button" onClick={() => { setMode(m => m === 'login' ? 'register' : 'login'); setError(null) }}>
+            {mode === 'login' ? '注册管理员' : '去登录'}
           </button>
         </p>
       </div>

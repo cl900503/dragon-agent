@@ -29,8 +29,14 @@ export interface UploadedDocument {
   originalName: string
   fileSize: number
   mimeType: string
+  kbId?: string
+  kbName?: string
+  uploaderName?: string
+  userId?: number
+  canDelete?: boolean
   status: 'UPLOADING' | 'PARSING' | 'INDEXING' | 'READY' | 'FAILED'
   chunkCount: number
+  errorMessage?: string
   createdAt: string
 }
 

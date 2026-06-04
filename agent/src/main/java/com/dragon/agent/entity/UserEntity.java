@@ -30,6 +30,21 @@ public class UserEntity {
     @Column(name = "password_hash", nullable = false, length = 255)
     private String passwordHash;
 
+    @Column(name = "display_name", length = 100)
+    private String displayName;
+
+    @Column(length = 200)
+    private String email;
+
+    @Column(length = 20)
+    private String role;
+
+    @Column(name = "department_id")
+    private Long departmentId;
+
+    @Column(length = 20)
+    private String status;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -75,7 +90,15 @@ public class UserEntity {
         this.passwordHash = passwordHash;
     }
 
-    public void setCreatedAt(Instant createdAt) {
-        this.createdAt = createdAt;
-    }
+    public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
+    public String getDisplayName() { return displayName; }
+    public void setDisplayName(String displayName) { this.displayName = displayName; }
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
+    public String getRole() { return role; }
+    public void setRole(String role) { this.role = role; }
+    public Long getDepartmentId() { return departmentId; }
+    public void setDepartmentId(Long departmentId) { this.departmentId = departmentId; }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
 }

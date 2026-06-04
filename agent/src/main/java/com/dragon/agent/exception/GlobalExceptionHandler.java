@@ -51,6 +51,18 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of(401, "Unauthorized", ex.getMessage()));
     }
 
+    /** 业务校验异常 → 400 */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ErrorResponse> handleBadRequest(IllegalArgumentException ex) {
+        return ResponseEntity.badRequest().body(ErrorResponse.of(400, "Bad Request", ex.getMessage()));
+    }
+
+    /** 越权拒绝 → 403 */
+    @ExceptionHandler(SecurityException.class)
+    public ResponseEntity<ErrorResponse> handleForbidden(SecurityException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ErrorResponse.of(403, "Forbidden", ex.getMessage()));
+    }
+
     /**
      * 兜底处理——捕获所有未被上层精确匹配的异常。 记录完整堆栈到日志，对外只返回模糊提示，不泄漏内部细节。
      */

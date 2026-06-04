@@ -50,41 +50,7 @@ public class AiService {
     private UserRepository userRepository;
 
     /**
-     * 同步对话——保存消息、检索知识库、调用 LLM、保存回复。
-     *
-     * @param message        用户消息
-     * @param conversationId 会话 ID
-     * @param enableRag      是否启用知识库检索
-     * @param userMsgId      前端生成的用户消息 ID
-     * @param aiMsgId        前端生成的 AI 消息 ID
-     * @param username       当前用户名
-     * @return AI 完整回复
-     */
-    public String chat(String message, String conversationId, boolean enableRag, String userMsgId, String aiMsgId,
-            String username) {
-        conversationService.saveUserMessage(userMsgId, conversationId, message);
-
-        RagResult rag = retrieveKnowledgeBase(message, enableRag, username);
-        if (!rag.isEmpty()) {
-            conversationService.saveRetrievalTraces(userMsgId, conversationId, rag.traces());
-        }
-
-        ChatClient client = chatClientBuilder.defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
-                .build();
-        var prompt = client.prompt().advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId)).user(message);
-        if (!rag.isEmpty()) {
-            prompt = prompt.system(buildSystemPrompt(rag.context()));
-        }
-
-        String response = prompt.call().content();
-        conversationService.saveAssistantMessage(aiMsgId, conversationId, response);
-        return response;
-    }
-
-    /**
      * SSE 流式对话——逐 token 推送，流结束后持久化消息和推理过程。
-     *
-     * @param message        用户消息
      * @param conversationId 会话 ID
      * @param enableRag      是否启用知识库检索
      * @param userMsgId      用户消息 ID

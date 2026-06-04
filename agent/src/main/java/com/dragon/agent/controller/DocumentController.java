@@ -51,12 +51,16 @@ public class DocumentController {
     @Autowired
     private SecurityHelper securityHelper;
 
-    @org.springframework.beans.factory.annotation.Value("${app.upload.allowed-mime-types}")
-    private List<String> allowedMimeTypes;
+    private static final List<String> ALLOWED_MIME_TYPES = List.of("application/pdf",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            "text/plain", "text/markdown", "text/x-java-source", "text/x-python", "text/x-c", "text/csv",
+            "application/json");
 
     @PostMapping("/upload")
     public Mono<ResponseEntity<Object>> upload(@RequestPart("file") FilePart file,
-            @RequestParam(name = "conversationId", required = false) String conversationId) {
+            @RequestParam(name = "kbId", required = false) String kbId) {
         if (documentService == null)
             return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(Map.of("error", "文档服务未就绪")));
         return securityHelper.currentUsername().flatMap(username -> {
@@ -75,7 +79,7 @@ public class DocumentController {
                     return Mono.just(ResponseEntity.badRequest().body(Map.of("error", "文件大小超过限制（最大 20MB）")));
                 return Mono
                         .fromCallable(() -> documentService.upload(new ByteArrayInputStream(bytes), originalName,
-                                (long) bytes.length, mimeType, conversationId, username))
+                                (long) bytes.length, mimeType, kbId, username))
                         .subscribeOn(Schedulers.boundedElastic()).map(r -> ResponseEntity.status(201).body((Object) r));
             });
         });
@@ -83,11 +87,20 @@ public class DocumentController {
 
     @GetMapping
     public Mono<ResponseEntity<List<DocumentResponse>>> list(
-            @RequestParam(name = "conversationId", required = false) String conversationId) {
+            @RequestParam(name = "kbId", required = false) String kbId) {
         if (documentService == null)
             return Mono.just(ResponseEntity.ok(List.of()));
         return securityHelper.currentUsername()
-                .map(username -> ResponseEntity.ok(documentService.listDocuments(username, conversationId)));
+                .map(username -> {
+                    if (kbId != null && !kbId.isBlank()) {
+                        try {
+                            return ResponseEntity.ok(documentService.listDocumentsByKb(kbId, username));
+                        } catch (IllegalArgumentException e) {
+                            return ResponseEntity.status(403).body(List.of());
+                        }
+                    }
+                    return ResponseEntity.ok(documentService.listDocuments(username));
+                });
     }
 
     @DeleteMapping("/{id}")
@@ -149,7 +162,7 @@ public class DocumentController {
 
     /** 检查 MIME 类型是否在允许列表中 */
     private boolean isAllowedMimeType(String mimeType) {
-        return allowedMimeTypes.stream().anyMatch(allowed -> {
+        return ALLOWED_MIME_TYPES.stream().anyMatch(allowed -> {
             if (allowed.endsWith("/*"))
                 return mimeType.startsWith(allowed.replace("/*", "/"));
             return allowed.equals(mimeType);

@@ -21,8 +21,8 @@ import jakarta.persistence.Table;
  */
 @Entity
 @Table(name = "documents", indexes = {@Index(name = "idx_doc_user_id", columnList = "user_id"),
-        @Index(name = "idx_doc_conversation_id", columnList = "conversation_id"),
         @Index(name = "idx_doc_status", columnList = "status"),
+        @Index(name = "idx_doc_kb_id", columnList = "kb_id"),
         @Index(name = "idx_doc_user_status", columnList = "user_id,status")})
 public class DocumentEntity {
 
@@ -33,8 +33,8 @@ public class DocumentEntity {
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
-    @Column(name = "conversation_id", length = 36)
-    private String conversationId;
+    @Column(name = "kb_id", length = 36)
+    private String kbId;
 
     @Column(name = "original_name", nullable = false, length = 500)
     private String originalName;
@@ -70,11 +70,10 @@ public class DocumentEntity {
 
     public DocumentEntity() {}
 
-    public DocumentEntity(String id, Long userId, String conversationId, String originalName, String storedPath,
+    public DocumentEntity(String id, Long userId, String originalName, String storedPath,
             Long fileSize, String mimeType) {
         this.id = id;
         this.userId = userId;
-        this.conversationId = conversationId;
         this.originalName = originalName;
         this.storedPath = storedPath;
         this.fileSize = fileSize;
@@ -100,13 +99,8 @@ public class DocumentEntity {
         this.userId = userId;
     }
 
-    public String getConversationId() {
-        return conversationId;
-    }
-
-    public void setConversationId(String conversationId) {
-        this.conversationId = conversationId;
-    }
+    public String getKbId() { return kbId; }
+    public void setKbId(String kbId) { this.kbId = kbId; }
 
     public String getOriginalName() {
         return originalName;

@@ -1,11 +1,14 @@
 package com.dragon.agent.controller;
 
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.ReactiveAuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
-import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextImpl;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.web.server.context.ServerSecurityContextRepository;
@@ -21,6 +24,7 @@ import com.dragon.agent.dto.AuthResponse;
 import com.dragon.agent.dto.LoginRequest;
 import com.dragon.agent.dto.RegisterRequest;
 import com.dragon.agent.exception.UsernameAlreadyExistsException;
+import com.dragon.agent.repository.UserRepository;
 import com.dragon.agent.service.TokenService;
 import com.dragon.agent.service.UserService;
 
@@ -29,9 +33,10 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 /**
- * 认证接口——注册、登录、登出和会话检查。
+ * 认证接口——注册（管理员创建用户）、登录、登出和会话检查。
  *
- * 登录/注册成功后手动将 SecurityContext 写入 WebSession， 浏览器自动收到 SESSION cookie，后续请求自动携带。
+ * 注册仅允许 ADMIN 角色调用。首个管理员需在数据库空时直接注册，
+ * 之后通过 /api/admin/users 接口管理用户。
  *
  * @author 陈龙
  * @since 2026-06-01
@@ -40,84 +45,115 @@ import reactor.core.scheduler.Schedulers;
 @RequestMapping("/api/auth")
 public class AuthController {
 
-    private final UserService userService;
-    private final TokenService tokenService;
-    private final ReactiveAuthenticationManager authManager;
-    private final ServerSecurityContextRepository securityContextRepository;
+    @Autowired
+    private ReactiveAuthenticationManager authenticationManager;
 
-    public AuthController(UserService userService, TokenService tokenService, ReactiveAuthenticationManager authManager,
-            ServerSecurityContextRepository securityContextRepository) {
-        this.userService = userService;
-        this.tokenService = tokenService;
-        this.authManager = authManager;
-        this.securityContextRepository = securityContextRepository;
-    }
+    @Autowired
+    private ServerSecurityContextRepository securityContextRepository;
+
+    @Autowired
+    private UserService userService;
+
+    @Autowired
+    private TokenService tokenService;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private com.dragon.agent.support.SecurityHelper securityHelper;
 
     /**
-     * POST /api/auth/register — 注册新用户，成功后自动登录。
+     * 注册——DB 空时首个用户自动成为系统管理员，之后仅 ADMIN 可创建用户。
      */
     @PostMapping("/register")
     public Mono<ResponseEntity<AuthResponse>> register(@Valid @RequestBody RegisterRequest request,
             ServerWebExchange exchange) {
-        return Mono.fromCallable(() -> userService.register(request.username(), request.password()))
-                .subscribeOn(Schedulers.boundedElastic()).flatMap(userDetails -> {
-                    String token = tokenService.generateToken(request.username());
-                    exchange.getResponse().addCookie(AuthTokenWebFilter.createTokenCookie(token));
-                    return saveSecurityContext(userDetails, exchange)
-                            .thenReturn(ResponseEntity.status(201).body(new AuthResponse(request.username(), "注册成功")));
-                }).onErrorResume(UsernameAlreadyExistsException.class,
-                        e -> Mono.just(ResponseEntity.status(409).body(new AuthResponse(null, e.getMessage()))));
+        boolean isFirstUser = userRepository.count() == 0;
+
+        if (!isFirstUser) {
+            return securityHelper.currentUsername()
+                    .flatMap(currentUser -> {
+                        var adminUser = userRepository.findByUsername(currentUser).orElse(null);
+                        if (adminUser == null || !"ADMIN".equals(adminUser.getRole())) {
+                            return Mono.just(ResponseEntity.status(403)
+                                    .body(new AuthResponse(null, "系统已初始化，新账号需由管理员在「管理面板」中创建")));
+                        }
+                        return doRegister(request, exchange, null);
+                    })
+                    .switchIfEmpty(Mono.just(ResponseEntity.status(403)
+                            .body(new AuthResponse(null, "系统已由管理员接管，新账号请联系管理员创建"))));
+        }
+        // 首个用户自动设为 ADMIN
+        return doRegister(request, exchange, "ADMIN");
     }
 
-    /**
-     * POST /api/auth/login — 验证凭证并建立会话。
-     */
+    /** 登录 */
     @PostMapping("/login")
     public Mono<ResponseEntity<AuthResponse>> login(@Valid @RequestBody LoginRequest request,
             ServerWebExchange exchange) {
-        Authentication token = new UsernamePasswordAuthenticationToken(request.username(), request.password());
-        return authManager.authenticate(token).flatMap(auth -> {
-            UserDetails user = (UserDetails) auth.getPrincipal();
-            String authToken = tokenService.generateToken(user.getUsername());
-            exchange.getResponse().addCookie(AuthTokenWebFilter.createTokenCookie(authToken));
-            return saveSecurityContext(user, exchange)
-                    .thenReturn(ResponseEntity.ok(new AuthResponse(user.getUsername(), "登录成功")));
+        var token = UsernamePasswordAuthenticationToken.unauthenticated(request.username(), request.password());
+        return authenticationManager.authenticate(token).flatMap(auth -> {
+            return exchange.getSession().flatMap(session -> {
+                var ctx = new SecurityContextImpl(auth);
+                session.getAttributes().put("SPRING_SECURITY_CONTEXT", ctx);
+                return securityContextRepository.save(exchange, ctx).thenReturn(session);
+            }).then(Mono.fromCallable(() -> {
+                UserDetails user = (UserDetails) auth.getPrincipal();
+                String tokenValue = tokenService.generateToken(user.getUsername());
+                exchange.getResponse().addCookie(AuthTokenWebFilter.createTokenCookie(tokenValue));
+                var userEntity = userRepository.findByUsername(user.getUsername()).orElse(null);
+                String role = userEntity != null ? userEntity.getRole() : null;
+                return ResponseEntity.ok(new AuthResponse(user.getUsername(), role, "登录成功"));
+            }).subscribeOn(Schedulers.boundedElastic()));
         }).onErrorResume(AuthenticationException.class,
-                e -> Mono.just(ResponseEntity.status(401).body(new AuthResponse(null, e.getMessage()))));
+                e -> Mono.just(ResponseEntity.status(401).body(new AuthResponse(null, "用户名或密码错误"))));
     }
 
-    /**
-     * POST /api/auth/logout — 清除 SecurityContext，失效会话。
-     */
+    /** 登出 */
     @PostMapping("/logout")
-    public Mono<ResponseEntity<Void>> logout(ServerWebExchange exchange) {
-        SecurityContext emptyContext = new SecurityContextImpl();
-        exchange.getResponse().addCookie(AuthTokenWebFilter.clearTokenCookie());
-        return securityContextRepository.save(exchange, emptyContext).then(Mono.just(ResponseEntity.ok().build()));
+    public Mono<ResponseEntity<AuthResponse>> logout(ServerWebExchange exchange) {
+        return exchange.getSession().flatMap(session -> {
+            session.getAttributes().clear();
+            return session.invalidate();
+        }).then(Mono.fromCallable(() -> {
+            exchange.getResponse().addCookie(AuthTokenWebFilter.clearTokenCookie());
+            return ResponseEntity.ok(new AuthResponse(null, "已退出"));
+        }).subscribeOn(Schedulers.boundedElastic()));
     }
 
-    /**
-     * GET /api/auth/me — 检查当前会话状态。
-     *
-     * 注意：此端点配置为 permitAll，因为未登录时也需要得到明确的 401 响应， 而不是被 Spring Security 的认证过滤器拦截。
-     */
+    /** 会话检查 */
     @GetMapping("/me")
-    public Mono<ResponseEntity<AuthResponse>> me(ServerWebExchange exchange) {
-        return securityContextRepository.load(exchange)
-                .filter(ctx -> ctx.getAuthentication() != null && ctx.getAuthentication().isAuthenticated()
-                        && ctx.getAuthentication().getPrincipal() instanceof UserDetails)
-                .map(ctx -> {
-                    UserDetails user = (UserDetails) ctx.getAuthentication().getPrincipal();
-                    return ResponseEntity.ok(new AuthResponse(user.getUsername(), "已登录"));
-                }).defaultIfEmpty(ResponseEntity.status(401).body(new AuthResponse(null, "未登录")));
+    public Mono<ResponseEntity<Map<String, String>>> me() {
+        return securityHelper.currentUsername()
+                .map(username -> {
+                    var user = userRepository.findByUsername(username).orElse(null);
+                    String role = user != null && user.getRole() != null ? user.getRole() : "USER";
+                    return ResponseEntity.ok(Map.of("username", username, "role", role, "message", "已登录"));
+                })
+                .switchIfEmpty(Mono.just(ResponseEntity.status(401)
+                        .body(Map.of("username", "", "role", "", "message", "未登录"))));
     }
 
-    /**
-     * 保存已认证的 SecurityContext 到 WebSession。
-     */
-    private Mono<Void> saveSecurityContext(UserDetails user, ServerWebExchange exchange) {
-        Authentication auth = new UsernamePasswordAuthenticationToken(user, null, user.getAuthorities());
-        SecurityContext context = new SecurityContextImpl(auth);
-        return securityContextRepository.save(exchange, context);
+    private Mono<ResponseEntity<AuthResponse>> doRegister(RegisterRequest request, ServerWebExchange exchange,
+            String defaultRole) {
+        String role = defaultRole != null ? defaultRole : request.role();
+        return Mono.fromCallable(() -> userService.register(request.username(), request.password(),
+                        request.displayName(), request.email(), role, request.departmentId()))
+                .subscribeOn(Schedulers.boundedElastic())
+                .flatMap(user -> exchange.getSession().flatMap(session -> {
+                    var auth = new UsernamePasswordAuthenticationToken(user, null,
+                            List.of(new SimpleGrantedAuthority("ROLE_USER")));
+                    var ctx = new SecurityContextImpl(auth);
+                    session.getAttributes().put("SPRING_SECURITY_CONTEXT", ctx);
+                    return securityContextRepository.save(exchange, ctx).thenReturn(session);
+                }).then(Mono.fromCallable(() -> {
+                    String tokenValue = tokenService.generateToken(user.getUsername());
+                    exchange.getResponse().addCookie(AuthTokenWebFilter.createTokenCookie(tokenValue));
+                    return ResponseEntity.status(201)
+                            .body(new AuthResponse(user.getUsername(), role, "注册成功"));
+                }).subscribeOn(Schedulers.boundedElastic())))
+                .onErrorResume(UsernameAlreadyExistsException.class,
+                        e -> Mono.just(ResponseEntity.status(409).body(new AuthResponse(null, e.getMessage()))));
     }
 }
