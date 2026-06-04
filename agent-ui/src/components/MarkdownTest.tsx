@@ -275,7 +275,7 @@ classDiagram
 export default function MarkdownTest() {
   return (
     <div className="markdown-test-panel">
-      <h1>Markdown 语法测试面板</h1>
+      <h1>渲染效果预览</h1>
       <MarkdownRenderer sanitizeSchema={testSchema} mermaidIdPrefix="mermaid-test">
         {testMarkdown}
       </MarkdownRenderer>

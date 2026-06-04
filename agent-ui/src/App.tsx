@@ -8,6 +8,7 @@ import LoginPage from './components/LoginPage'
 import KnowledgeBase from './components/KnowledgeBase'
 import RagTest from './components/RagTest'
 import AdminPanel from './components/AdminPanel'
+import RagDashboard from './components/RagDashboard'
 import ToastContainer from './components/Toast'
 import { useAuth } from './hooks/useAuth'
 import { useConversation } from './hooks/useConversation'
@@ -170,6 +171,8 @@ export default function App() {
             <div className="chat-scroll"><div className="chat-area chat-area--test">
               <Suspense fallback={<div className="devtools-loading">加载中...</div>}><MarkdownTest /></Suspense>
             </div></div>
+          ) : activeDevTool === 'dashboard' ? (
+            <RagDashboard />
           ) : (
             <RagTest />
           )

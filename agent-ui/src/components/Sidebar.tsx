@@ -127,8 +127,9 @@ export default function Sidebar({
 }: Props) {
   const title = kbActive ? '知识库' : devActive ? '开发工具' : adminActive ? '组织架构' : '对话列表'
   const devTools = [
-    { id: 'rag', label: 'RAG 检索调试', icon: '🔍' },
-    { id: 'markdown', label: 'Markdown 渲染测试', icon: '📝' },
+    { id: 'rag', label: '语义检索调试', icon: '🔎' },
+    { id: 'dashboard', label: '检索质量分析', icon: '📈' },
+    { id: 'markdown', label: '渲染效果预览', icon: '📐' },
   ]
   const [showNewDept, setShowNewDept] = useState(false)
   const [newDeptName, setNewDeptName] = useState('')
