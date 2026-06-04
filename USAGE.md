@@ -130,6 +130,12 @@ agent-ui/
 
 ## REST API
 
+### 待上线清单
+- 密码修改、操作审计日志、接口限流
+- 结构化日志、健康检查完善、文档替换
+- 大文件分片上传、文档处理异步化
+- CI/CD 流水线、Flyway 数据库迁移
+
 ### 认证
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -163,6 +169,14 @@ agent-ui/
 | POST | /api/kb | 创建知识库 |
 | DELETE | /api/kb/:id | 删除知识库 |
 
+### RAG 检索质量
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | /api/rag/feedback | 提交检索反馈 |
+| GET | /api/rag/feedback/batch | 批量查询反馈状态 |
+| GET | /api/rag/stats | 30 天检索统计 |
+| GET | /api/rag/recent | 最近检索记录 |
+
 ### 管理
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -195,6 +209,8 @@ agent-ui/
 | tool_traces | 工具调用追溯（预留） |
 | documents | 知识库文档 |
 | knowledge_bases | 知识库 |
+| rag_feedback | 检索反馈 |
+| rag_search_logs | 检索日志 |
 
 ## 注意事项
 

@@ -4,14 +4,15 @@
 
 ## 特性
 
-- RAG 知识库：文档上传 → Tika 解析 → 分块 → BGE-M3 向量化 → Milvus 语义检索
+- RAG 知识库：上传 → Tika 解析 → 分块 → BGE-M3 向量化 → Milvus 语义检索
 - 流式对话：SSE 逐 token 推送 + DeepSeek R1 推理过程实时展示
-- 权限体系：ADMIN / DEPT_ADMIN / USER 三级角色，后端接口层强制鉴权
-- 知识库可见性：PRIVATE / DEPARTMENT / COMPANY，部门归属创建时冻结
-- 组织架构：部门管理 + 人员管理，按角色分级授权
-- Markdown 渲染：GFM、KaTeX 数学公式、Mermaid 图表、代码高亮
-- 四大 Trace 追溯：ChatMemory / ReasoningTrace / RetrievalTrace / ToolTrace
-- 企业级基础设施：MinIO + Milvus + MySQL + Docker Compose 一键部署
+- 三级权限：ADMIN / DEPT_ADMIN / USER，后端接口层强制鉴权
+- KB 可见性：PRIVATE / DEPARTMENT / COMPANY，部门归属创建时冻结
+- 组织架构：部门管理 + 人员管理 + 表格展示 + 分页 + 弹窗编辑
+- RAG 质量：检索反馈 + 检索日志 + 质量分析仪表盘 + 分块策略可配
+- 四大 Trace：ChatMemory / ReasoningTrace / RetrievalTrace / ToolTrace
+- 检索来源：片段详情展示 + 相似度百分比 + 按文档分组
+- 开发工具：语义检索调试 / 检索质量分析 / 渲染效果预览
 
 ## 技术栈
 
