@@ -144,7 +144,7 @@ public class DocumentService {
             entity.setStatus(DocumentStatus.READY);
             documentRepository.save(entity);
             log.info("Document [{}] indexed: {} chunks (kb={})", originalName, chunks.size(), kbId);
-            return DocumentResponse.from(entity);
+            return enrichSingle(entity, username);
         } catch (Exception e) {
             log.error("Document processing failed [{}]: {}", originalName, e.getMessage());
             if (entity.getStoredPath() != null && !entity.getStoredPath().isBlank()) {
@@ -178,6 +178,19 @@ public class DocumentService {
     /**
      * 批量富化文档响应——一次性加载 KB 名称和上传者名称，同时计算当前用户能否删除每个文档。
      */
+    /** 单文档富化——上传成功后返回完整属性 */
+    private DocumentResponse enrichSingle(DocumentEntity doc, String username) {
+        String kbName = doc.getKbId() != null ? kbRepository.findById(doc.getKbId()).map(kb -> kb.getName()).orElse(null) : null;
+        String uploaderName = userRepository.findById(doc.getUserId()).map(UserEntity::getUsername).orElse(null);
+        UserEntity currentUser = userRepository.findByUsername(username).orElse(null);
+        boolean canDelete = currentUser != null && doc.getUserId().equals(currentUser.getId());
+        if (!canDelete && doc.getKbId() != null && currentUser != null) {
+            var kb = kbRepository.findById(doc.getKbId()).orElse(null);
+            canDelete = kb != null && knowledgeBaseService.canManage(kb, currentUser);
+        }
+        return DocumentResponse.enriched(doc, kbName, uploaderName, canDelete);
+    }
+
     private List<DocumentResponse> enrichBatch(List<DocumentEntity> docs, UserEntity currentUser) {
         if (docs.isEmpty()) return List.of();
 

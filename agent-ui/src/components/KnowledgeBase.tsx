@@ -63,6 +63,7 @@ export default function KnowledgeBase({ documents, onDocumentsChange, activeKbId
   const [sort, setSort] = useState<'name' | 'date' | 'size'>('date')
   const [page, setPage] = useState(0)
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [confirmDel, setConfirmDel] = useState<UploadedDocument | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleFiles = useCallback(async (files: FileList) => {
@@ -87,11 +88,14 @@ export default function KnowledgeBase({ documents, onDocumentsChange, activeKbId
   const onDragLeave = (e: DragEvent) => { e.preventDefault(); setDragOver(false) }
   const onDrop = (e: DragEvent) => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files) }
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async () => {
+    if (!confirmDel) return
+    const doc = confirmDel
+    setConfirmDel(null)
     try {
-      await deleteDocument(id)
-      onDocumentsChange(documents.filter(d => d.id !== id))
-      setSelected(prev => { const n = new Set(prev); n.delete(id); return n })
+      await deleteDocument(doc.id)
+      onDocumentsChange(documents.filter(d => d.id !== doc.id))
+      setSelected(prev => { const n = new Set(prev); n.delete(doc.id); return n })
       showToast('文档已删除', 'success')
     } catch (err) { showToast(err instanceof Error ? err.message : '删除失败') }
   }
@@ -264,7 +268,7 @@ export default function KnowledgeBase({ documents, onDocumentsChange, activeKbId
                   )}
                   {doc.status === 'FAILED' && <button className="kb-act kb-retry" onClick={() => handleRetry(doc.id)} title="重试">↻</button>}
                   {doc.canDelete && (
-                    <button className="kb-act kb-del" onClick={() => handleDelete(doc.id)} title="删除">✕</button>
+                    <button className="kb-act kb-del" onClick={() => setConfirmDel(doc)} title="删除">✕</button>
                   )}
                 </span>
                 {expandedId === doc.id && doc.chunkCount > 0 && (
@@ -291,6 +295,24 @@ export default function KnowledgeBase({ documents, onDocumentsChange, activeKbId
             </div>
           )}
         </>
+      )}
+      {confirmDel && (
+        <div className="confirm-overlay" onClick={() => setConfirmDel(null)}>
+          <div className="confirm-dialog" onClick={e => e.stopPropagation()}>
+            <div className="confirm-icon-circle">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="1.8" strokeLinecap="round">
+                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+            </div>
+            <h3>确认删除文档</h3>
+            <p className="confirm-msg">确定要删除 <strong>「{confirmDel.originalName}」</strong> 吗？</p>
+            <p className="confirm-hint">此操作将同时删除 MinIO 文件和 Milvus 向量数据</p>
+            <div className="confirm-actions">
+              <button className="admin-btn-cancel" onClick={() => setConfirmDel(null)}>取消</button>
+              <button className="admin-btn" onClick={handleDelete} style={{ background: '#ef4444' }}>确认删除</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
