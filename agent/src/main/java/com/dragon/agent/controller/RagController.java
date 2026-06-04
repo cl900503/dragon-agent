@@ -79,7 +79,7 @@ public class RagController {
             for (Object[] row : feedbackStats) {
                 long count = (Long) row[1];
                 total += count;
-                if ("USEFUL".equals(row[0])) useful += count;
+                if (RagFeedback.Rating.USEFUL.equals(row[0])) useful += count;
             }
 
             var searchStats = searchLogRepository.statsBetween(thirtyDaysAgo, now);
