@@ -126,6 +126,13 @@
 .citation-chunk-score { font-size: 10px; color: #16a34a; font-weight: 600; background: #f0fdf4; padding: 1px 6px; border-radius: 4px; }
 .citation-chunk-text { font-size: 12px; color: #475569; line-height: 1.5; white-space: pre-wrap; word-break: break-word; max-height: 80px; overflow-y: auto; }
 
+/* 检索反馈 */
+.feedback-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding-top: 8px; border-top: 1px solid #f1f5f9; font-size: 12px; }
+.feedback-label { color: #94a3b8; }
+.feedback-btn { padding: 4px 12px; border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; color: #64748b; font-size: 12px; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+.feedback-btn:hover { border-color: #4f46e5; color: #4f46e5; background: #eef2ff; }
+.feedback-done { color: #16a34a; font-weight: 500; }
+
 .reasoning.collapsed .reasoning-content {
   display: none;
 }

@@ -77,3 +77,17 @@
   font-size: 11px; line-height: 1.6; overflow-x: auto; margin: 6px 0 0;
   font-family: 'Cascadia Code', 'Fira Code', monospace;
 }
+
+/* 检索质量看板 */
+.rt-dashboard { padding: 8px 0; }
+.rt-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.rt-stat-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; text-align: center; }
+.rt-stat-val { font-size: 22px; font-weight: 700; color: #1e293b; }
+.rt-stat-lbl { font-size: 11px; color: #94a3b8; margin-top: 4px; }
+.rt-empty { color: #94a3b8; font-size: 13px; text-align: center; padding: 12px; }
+.rt-recent { margin-top: 12px; }
+.rt-recent h4 { margin: 0 0 8px; font-size: 13px; color: #64748b; }
+.rt-recent-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.rt-recent-table th { text-align: left; padding: 6px 8px; color: #94a3b8; border-bottom: 1px solid #e2e8f0; }
+.rt-recent-table td { padding: 6px 8px; color: #475569; border-bottom: 1px solid #f1f5f9; }
+.rt-recent-q { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

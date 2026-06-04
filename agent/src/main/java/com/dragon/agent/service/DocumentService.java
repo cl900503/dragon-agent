@@ -69,6 +69,15 @@ public class DocumentService {
     @Autowired
     private com.dragon.agent.repository.KnowledgeBaseRepository kbRepository;
 
+    @Autowired
+    private com.dragon.agent.repository.RagSearchLogRepository searchLogRepository;
+
+    @Value("${app.rag.chunk-size:512}")
+    private int defaultChunkSize;
+
+    @Value("${app.rag.chunk-overlap:50}")
+    private int defaultChunkOverlap;
+
     @Value("${app.rag.top-k:5}")
     private int topK;
 
@@ -110,7 +119,7 @@ public class DocumentService {
             entity.setStatus(DocumentStatus.INDEXING);
             documentRepository.save(entity);
 
-            List<Document> chunks = chunkingService.chunk(List.of(parsedDoc));
+            List<Document> chunks = chunkingService.chunk(List.of(parsedDoc), defaultChunkSize, defaultChunkOverlap);
             if (chunks.isEmpty()) throw new RuntimeException("文档内容为空");
 
             for (int i = 0; i < chunks.size(); i++) {
@@ -261,7 +270,7 @@ public class DocumentService {
         log.info("Retrying document [{}]", entity.getOriginalName());
         try (InputStream storedStream = fileStorageService.read(entity.getStoredPath())) {
             Document parsedDoc = documentParserService.parse(storedStream, entity.getOriginalName(), entity.getMimeType());
-            List<Document> chunks = chunkingService.chunk(List.of(parsedDoc));
+            List<Document> chunks = chunkingService.chunk(List.of(parsedDoc), defaultChunkSize, defaultChunkOverlap);
             for (int i = 0; i < chunks.size(); i++) {
                 chunks.get(i).getMetadata().put("documentId", documentId);
                 chunks.get(i).getMetadata().put("originalName", entity.getOriginalName());
@@ -306,15 +315,27 @@ public class DocumentService {
                 filter.append("]");
             }
 
+            long start = System.currentTimeMillis();
             SearchRequest request = SearchRequest.builder()
                     .query(query).topK(topK)
                     .similarityThreshold(similarityThreshold)
                     .filterExpression(filter.toString())
                     .build();
             List<Document> results = vectorStore.similaritySearch(request);
+            long durationMs = System.currentTimeMillis() - start;
+
+            // 记录检索日志
+            double topScore = results.stream().mapToDouble(d -> d.getScore() != null ? d.getScore() : 0).max().orElse(0);
+            double avgScore = results.stream().mapToDouble(d -> d.getScore() != null ? d.getScore() : 0).average().orElse(0);
+            try {
+                searchLogRepository.save(new com.dragon.agent.entity.RagSearchLog(
+                        userId, query, String.join(",", accessibleKbIds),
+                        results.size(), topScore, avgScore, durationMs, !results.isEmpty()));
+            } catch (Exception ignored) { /* 日志写入失败不影响主流程 */ }
+
             if (results.isEmpty()) return RagResult.EMPTY;
 
-            log.debug("RAG retrieved {} chunks", results.size());
+            log.debug("RAG retrieved {} chunks in {}ms", results.size(), durationMs);
             List<Map<String, Object>> traces = buildTraces(results);
             return new RagResult(formatContext(results), traces);
         } catch (Exception e) {

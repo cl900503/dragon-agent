@@ -63,7 +63,8 @@ public class KnowledgeBaseService {
      * ADMIN 可创建任意可见性，DEPT_ADMIN 可创建 PRIVATE/DEPARTMENT，USER 仅可创建 PRIVATE。
      */
     @Transactional
-    public KnowledgeBaseEntity create(String name, String description, KbVisibility visibility, Long departmentId, String username) {
+    public KnowledgeBaseEntity create(String name, String description, KbVisibility visibility, Long departmentId,
+            Integer chunkSize, Integer chunkOverlap, String username) {
         UserEntity user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new IllegalStateException("用户不存在"));
 
@@ -97,6 +98,8 @@ public class KnowledgeBaseService {
         if (visibility == KbVisibility.DEPARTMENT) {
             kb.setDepartmentId(departmentId);
         }
+        if (chunkSize != null && chunkSize > 0) kb.setChunkSize(chunkSize);
+        if (chunkOverlap != null && chunkOverlap >= 0) kb.setChunkOverlap(chunkOverlap);
         kbRepository.save(kb);
         log.info("Knowledge base [{}] created by {} (visibility={}, deptId={})", name, username, visibility, kb.getDepartmentId());
         return kb;

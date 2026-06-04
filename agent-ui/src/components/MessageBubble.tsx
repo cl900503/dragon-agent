@@ -19,6 +19,17 @@ interface Props {
 export default function MessageBubble({ message }: Props) {
   const [reasoningOpen, setReasoningOpen] = useState(true)
   const [traceOpen, setTraceOpen] = useState(false)
+  const [feedback, setFeedback] = useState<string | null>(null)
+
+  const submitFeedback = async (rating: string) => {
+    try {
+      const r = await fetch('/api/rag/feedback', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId: message.id, rating })
+      })
+      if (r.ok) setFeedback(rating)
+    } catch { /* */ }
+  }
 
   const toggle = useCallback(() => {
     if (message.content) setReasoningOpen(o => !o)
@@ -125,6 +136,21 @@ export default function MessageBubble({ message }: Props) {
               </div>
             )
           })()}
+
+        {/* 检索反馈 */}
+        {message.role === 'assistant' && message.content && message.retrievalTraces && message.retrievalTraces.length > 0 && (
+          <div className="feedback-row">
+            <span className="feedback-label">检索质量如何？</span>
+            {feedback ? (
+              <span className="feedback-done">{feedback === 'USEFUL' ? '👍 感谢反馈' : '👎 感谢反馈'}</span>
+            ) : (
+              <>
+                <button className="feedback-btn" onClick={() => submitFeedback('USEFUL')} title="有用">👍 有用</button>
+                <button className="feedback-btn" onClick={() => submitFeedback('USELESS')} title="无用">👎 无用</button>
+              </>
+            )}
+          </div>
+        )}
 
         {/* 尚未收到任何 token 的纯等待状态 */}
         {message.thinking && !message.reasoning && !message.content && (

@@ -5,7 +5,7 @@
  * @since 2026-06-02
  */
 
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import './RagTest.css'
 
 interface TraceItem {
@@ -18,6 +18,8 @@ interface TraceItem {
 export default function RagTest() {
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(false)
+  const [stats, setStats] = useState<any>(null)
+  const [recent, setRecent] = useState<any[]>([])
   const [traces, setTraces] = useState<TraceItem[] | null>(null)
   const [context, setContext] = useState<string | null>(null)
   const [rawJson, setRawJson] = useState<string | null>(null)
@@ -25,6 +27,11 @@ export default function RagTest() {
   const [error, setError] = useState<string | null>(null)
   const [expandedChunks, setExpandedChunks] = useState<Set<number>>(new Set())
   const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    fetch('/api/rag/stats').then(r => r.json()).then(setStats).catch(() => {})
+    fetch('/api/rag/recent').then(r => r.json()).then(setRecent).catch(() => {})
+  }, [])
 
   const search = async () => {
     const q = query.trim()
@@ -93,6 +100,9 @@ export default function RagTest() {
       </div>
 
       {error && <div className="rt-error">{error}</div>}
+
+      {/* 质量看板 */}
+      <Dashboard stats={stats} recent={recent} />
 
       {/* 结果概览 */}
       {traces !== null && (
@@ -174,5 +184,62 @@ export default function RagTest() {
         </section>
       )}
     </div>
+  )
+}
+
+/** 检索质量看板 */
+function Dashboard({ stats, recent }: { stats: any; recent: any[] }) {
+  return (
+    <section className="rt-section">
+      <details>
+        <summary className="rt-raw-toggle">📊 检索质量看板（最近 30 天）</summary>
+        <div className="rt-dashboard">
+          {stats ? (
+            <div className="rt-stats-grid">
+              <div className="rt-stat-card">
+                <div className="rt-stat-val">{stats.totalSearches || 0}</div>
+                <div className="rt-stat-lbl">总检索次数</div>
+              </div>
+              <div className="rt-stat-card">
+                <div className="rt-stat-val">{stats.avgTopScore ? Number(stats.avgTopScore).toFixed(3) : '-'}</div>
+                <div className="rt-stat-lbl">平均最高分</div>
+              </div>
+              <div className="rt-stat-card">
+                <div className="rt-stat-val">{stats.avgDurationMs ? Math.round(stats.avgDurationMs) + 'ms' : '-'}</div>
+                <div className="rt-stat-lbl">平均耗时</div>
+              </div>
+              <div className="rt-stat-card">
+                <div className="rt-stat-val">{stats.feedbackRate || 'N/A'}</div>
+                <div className="rt-stat-lbl">有用反馈率 ({stats.feedbackUseful || 0}/{stats.feedbackTotal || 0})</div>
+              </div>
+              <div className="rt-stat-card">
+                <div className="rt-stat-val">{stats.missCount || 0}</div>
+                <div className="rt-stat-lbl">零结果次数</div>
+              </div>
+            </div>
+          ) : <p className="rt-empty">暂无统计数据</p>}
+
+          {recent.length > 0 && (
+            <div className="rt-recent">
+              <h4>最近检索记录</h4>
+              <table className="rt-recent-table">
+                <thead><tr><th>查询</th><th>命中</th><th>结果数</th><th>最高分</th><th>耗时</th></tr></thead>
+                <tbody>
+                  {recent.map((r: any) => (
+                    <tr key={r.id}>
+                      <td className="rt-recent-q" title={r.query}>{r.query?.slice(0, 40)}{r.query?.length > 40 ? '...' : ''}</td>
+                      <td>{r.hit ? '✅' : '❌'}</td>
+                      <td>{r.resultCount}</td>
+                      <td>{r.topScore?.toFixed(3)}</td>
+                      <td>{r.durationMs}ms</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </details>
+    </section>
   )
 }

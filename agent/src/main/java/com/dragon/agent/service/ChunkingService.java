@@ -22,10 +22,20 @@ public class ChunkingService {
     private static final Logger log = LoggerFactory.getLogger(ChunkingService.class);
 
     @Value("${app.rag.chunk-size:512}")
-    private int chunkSize;
+    private int defaultChunkSize;
+
+    @Value("${app.rag.chunk-overlap:50}")
+    private int defaultChunkOverlap;
 
     public List<Document> chunk(List<Document> documents) {
-        TokenTextSplitter splitter = TokenTextSplitter.builder().withChunkSize(chunkSize).withMinChunkSizeChars(50)
+        return chunk(documents, defaultChunkSize, defaultChunkOverlap);
+    }
+
+    public List<Document> chunk(List<Document> documents, int chunkSize, int chunkOverlap) {
+        // TokenTextSplitter 当前版本不支持 chunkOverlap，预留参数，后续版本启用
+        TokenTextSplitter splitter = TokenTextSplitter.builder()
+                .withChunkSize(chunkSize)
+                .withMinChunkSizeChars(50)
                 .build();
 
         List<Document> chunks = new ArrayList<>();

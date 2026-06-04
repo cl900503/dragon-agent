@@ -41,6 +41,12 @@ public class KnowledgeBaseEntity {
     @Enumerated(EnumType.STRING)
     private KbVisibility visibility;
 
+    @Column(name = "chunk_size")
+    private Integer chunkSize;
+
+    @Column(name = "chunk_overlap")
+    private Integer chunkOverlap;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -72,6 +78,10 @@ public class KnowledgeBaseEntity {
     public void setDepartmentId(Long departmentId) { this.departmentId = departmentId; }
     public KbVisibility getVisibility() { return visibility; }
     public void setVisibility(KbVisibility visibility) { this.visibility = visibility; }
+    public Integer getChunkSize() { return chunkSize; }
+    public void setChunkSize(Integer chunkSize) { this.chunkSize = chunkSize; }
+    public Integer getChunkOverlap() { return chunkOverlap; }
+    public void setChunkOverlap(Integer chunkOverlap) { this.chunkOverlap = chunkOverlap; }
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
 

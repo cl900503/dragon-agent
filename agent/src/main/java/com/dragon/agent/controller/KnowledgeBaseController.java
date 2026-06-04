@@ -48,7 +48,9 @@ public class KnowledgeBaseController {
                 String visStr = (String) body.getOrDefault("visibility", "PRIVATE");
                 KnowledgeBaseEntity.KbVisibility visibility = KnowledgeBaseEntity.KbVisibility.valueOf(visStr);
                 Long deptId = body.get("departmentId") != null ? Long.valueOf(body.get("departmentId").toString()) : null;
-                var kb = kbService.create(name, desc, visibility, deptId, username);
+                Integer chunkSize = body.get("chunkSize") != null ? Integer.valueOf(body.get("chunkSize").toString()) : null;
+                Integer chunkOverlap = body.get("chunkOverlap") != null ? Integer.valueOf(body.get("chunkOverlap").toString()) : null;
+                var kb = kbService.create(name, desc, visibility, deptId, chunkSize, chunkOverlap, username);
                 return ResponseEntity.status(201).body(Map.of(
                         "id", kb.getId(), "name", kb.getName(), "visibility", kb.getVisibility().name()));
             } catch (IllegalArgumentException e) {
