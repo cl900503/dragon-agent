@@ -64,6 +64,7 @@ export default function KnowledgeBase({ documents, onDocumentsChange, activeKbId
   const [page, setPage] = useState(0)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [confirmDel, setConfirmDel] = useState<UploadedDocument | null>(null)
+  const [confirmBatchDel, setConfirmBatchDel] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleFiles = useCallback(async (files: FileList) => {
@@ -101,13 +102,14 @@ export default function KnowledgeBase({ documents, onDocumentsChange, activeKbId
   }
   const batchDelete = async () => {
     if (selected.size === 0) return
+    setConfirmBatchDel(false)
     let success = 0, fail = 0
     for (const id of selected) {
       try { await deleteDocument(id); success++ } catch { fail++ }
     }
     onDocumentsChange(documents.filter(d => !selected.has(d.id)))
     setSelected(new Set())
-    if (fail > 0) showToast(`删除完成：${success} 成功, ${fail} 失败`)
+    if (fail > 0) showToast(`${success} 成功, ${fail} 失败`)
     else showToast(`已删除 ${success} 个文档`, 'success')
   }
   const handleRetry = async (id: string) => {
@@ -216,7 +218,7 @@ export default function KnowledgeBase({ documents, onDocumentsChange, activeKbId
                 <option value="size">按大小</option>
               </select>
               {selected.size > 0 && (
-                <button className="kb-batch-del" onClick={batchDelete}>删除选中 ({selected.size})</button>
+                <button className="kb-batch-del" onClick={() => setConfirmBatchDel(true)}>删除选中 ({selected.size})</button>
               )}
             </div>
           </div>
@@ -310,6 +312,24 @@ export default function KnowledgeBase({ documents, onDocumentsChange, activeKbId
             <div className="confirm-actions">
               <button className="admin-btn-cancel" onClick={() => setConfirmDel(null)}>取消</button>
               <button className="admin-btn" onClick={handleDelete} style={{ background: '#ef4444' }}>确认删除</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {confirmBatchDel && (
+        <div className="confirm-overlay" onClick={() => setConfirmBatchDel(false)}>
+          <div className="confirm-dialog" onClick={e => e.stopPropagation()}>
+            <div className="confirm-icon-circle">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="1.8" strokeLinecap="round">
+                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+            </div>
+            <h3>确认批量删除</h3>
+            <p className="confirm-msg">确定要删除选中的 <strong>{selected.size} 个文档</strong> 吗？</p>
+            <p className="confirm-hint">此操作将同时删除 MinIO 文件和 Milvus 向量数据</p>
+            <div className="confirm-actions">
+              <button className="admin-btn-cancel" onClick={() => setConfirmBatchDel(false)}>取消</button>
+              <button className="admin-btn" onClick={batchDelete} style={{ background: '#ef4444' }}>确认删除</button>
             </div>
           </div>
         </div>
