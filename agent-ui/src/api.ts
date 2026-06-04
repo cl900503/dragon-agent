@@ -40,10 +40,10 @@ export interface ConversationMessages {
 
 /** 后端返回的原始消息结构 */
 export interface BackendMessage {
+  id?: string
   messageType: 'USER' | 'ASSISTANT'
   text: string
   reasoning?: string
-  /** RAG 检索追溯 */
   retrievalTraces?: RetrievalTrace[]
 }
 

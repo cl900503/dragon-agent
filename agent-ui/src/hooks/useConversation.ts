@@ -187,7 +187,7 @@ export function useConversation(isLoggedIn: boolean) {
       try {
         const data = await fetchConversationMessages(id)
         const mapped: Message[] = data.messages.map(bm => ({
-          id: msgId(),
+          id: bm.id || msgId(),
           role: bm.messageType === 'USER' ? ('user' as const) : ('assistant' as const),
           content: bm.text,
           reasoning: bm.reasoning || '',

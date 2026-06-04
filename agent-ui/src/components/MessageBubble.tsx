@@ -16,10 +16,13 @@ interface Props {
  * @author 陈龙
  * @since 2026-05-31
  */
+// 会话级反馈记忆——避免切换页面后重复反馈
+const feedbackCache = new Map<string, string>()
+
 export default function MessageBubble({ message }: Props) {
   const [reasoningOpen, setReasoningOpen] = useState(true)
   const [traceOpen, setTraceOpen] = useState(false)
-  const [feedback, setFeedback] = useState<string | null>(null)
+  const [feedback, setFeedback] = useState<string | null>(() => feedbackCache.get(message.id) || null)
 
   const submitFeedback = async (rating: string) => {
     try {
@@ -27,7 +30,8 @@ export default function MessageBubble({ message }: Props) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messageId: message.id, rating })
       })
-      if (r.ok) setFeedback(rating)
+      if (r.ok) { feedbackCache.set(message.id, rating); setFeedback(rating) }
+      else if (r.status === 409) { feedbackCache.set(message.id, 'done'); setFeedback('done') }
     } catch { /* */ }
   }
 
