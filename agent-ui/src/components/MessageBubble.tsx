@@ -11,13 +11,14 @@ interface Props {
  * 消息气泡组件——渲染单条对话。
  *
  * 支持 Markdown 实时渲染（GFM + KaTeX 数学公式 + Mermaid 图表）、
- * DeepSeek 思考过程展开 / 折叠。
+ * DeepSeek 思考过程展开 / 折叠、RAG 检索来源详情展示。
  *
  * @author 陈龙
  * @since 2026-05-31
  */
 export default function MessageBubble({ message }: Props) {
   const [reasoningOpen, setReasoningOpen] = useState(true)
+  const [traceOpen, setTraceOpen] = useState(false)
 
   const toggle = useCallback(() => {
     if (message.content) setReasoningOpen(o => !o)
@@ -65,27 +66,62 @@ export default function MessageBubble({ message }: Props) {
           </div>
         )}
 
-        {/* AI 回复底部——仅展示 AI 实际提到的文档 */}
+        {/* RAG 检索来源 —— 文档名列表 + 可展开查看片段和分数 */}
         {message.role === 'assistant'
           && message.retrievalTraces
           && message.retrievalTraces.length > 0
           && (() => {
-            const allDocs = [...new Set(message.retrievalTraces!.map(t => t.documentName))]
-            // 只保留 AI 在回复中实际提到的文档
-            const cited = allDocs.filter(name => {
-              const short = name.replace(/\.[^.]+$/, '')
-              return message.content.includes(short) || message.content.includes(name)
+            const traces = message.retrievalTraces!
+            // 按文档名去重并分组
+            const byDoc = new Map<string, typeof traces>()
+            traces.forEach(t => {
+              if (!byDoc.has(t.documentName)) byDoc.set(t.documentName, [])
+              byDoc.get(t.documentName)!.push(t)
             })
-            if (cited.length === 0) return null
+            const docNames = [...byDoc.keys()]
+            if (docNames.length === 0) return null
             return (
               <div className="citation-section">
-                <span className="citation-label">📚 来自本地知识库：</span>
-                {cited.map((name, i) => (
-                  <span key={name}>
-                    <span className="citation-doc">{name}</span>
-                    {i < cited.length - 1 && <span className="citation-sep">、</span>}
+                <div className="citation-header" onClick={() => setTraceOpen(o => !o)}>
+                  <span className="citation-label">📚 本地知识库 · {docNames.length} 篇文档 · {traces.length} 个片段</span>
+                  <span className="citation-toggle">{traceOpen ? '▲' : '▼'}</span>
+                </div>
+                {traceOpen ? (
+                  <div className="citation-detail">
+                    {docNames.map(name => {
+                      const chunks = byDoc.get(name)!
+                      return (
+                        <div key={name} className="citation-doc-card">
+                          <div className="citation-doc-name">
+                            <span className="citation-doc-icon">📄</span>
+                            <span>{name}</span>
+                            <span className="citation-doc-count">{chunks.length} 个片段</span>
+                          </div>
+                          {chunks.map((t, i) => (
+                            <div key={i} className="citation-chunk">
+                              <div className="citation-chunk-meta">
+                                <span className="citation-chunk-idx">片段 #{t.chunkIndex}</span>
+                                {t.score != null && (
+                                  <span className="citation-chunk-score">相似度 {(t.score * 100).toFixed(1)}%</span>
+                                )}
+                              </div>
+                              <div className="citation-chunk-text">{t.contentSnippet}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <span className="citation-summary">
+                    {docNames.map((name, i) => (
+                      <span key={name}>
+                        <span className="citation-doc">{name}</span>
+                        {i < docNames.length - 1 && <span className="citation-sep">、</span>}
+                      </span>
+                    ))}
                   </span>
-                ))}
+                )}
               </div>
             )
           })()}

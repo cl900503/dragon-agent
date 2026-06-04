@@ -103,9 +103,28 @@
   border-top: 1px solid #e2e8f0;
   font-size: 12px; color: #94a3b8; line-height: 1.6;
 }
-.citation-label { color: #94a3b8; }
+.citation-header {
+  display: flex; align-items: center; justify-content: space-between;
+  cursor: pointer; user-select: none; padding: 4px 0;
+}
+.citation-header:hover { color: #64748b; }
+.citation-label { color: #64748b; font-weight: 500; }
+.citation-toggle { font-size: 10px; color: #cbd5e1; }
+.citation-summary { display: inline; }
 .citation-doc { color: #4f46e5; font-weight: 500; }
 .citation-sep { color: #cbd5e1; }
+
+/* 引用详情 */
+.citation-detail { margin-top: 8px; display: flex; flex-direction: column; gap: 10px; }
+.citation-doc-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; }
+.citation-doc-name { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #1e293b; font-weight: 600; margin-bottom: 6px; }
+.citation-doc-icon { font-size: 14px; }
+.citation-doc-count { font-size: 11px; color: #94a3b8; font-weight: 400; margin-left: auto; }
+.citation-chunk { padding: 6px 8px; background: #fff; border: 1px solid #f1f5f9; border-radius: 6px; margin-top: 4px; }
+.citation-chunk-meta { display: flex; align-items: center; gap: 10px; margin-bottom: 3px; }
+.citation-chunk-idx { font-size: 10px; color: #94a3b8; font-weight: 500; }
+.citation-chunk-score { font-size: 10px; color: #16a34a; font-weight: 600; background: #f0fdf4; padding: 1px 6px; border-radius: 4px; }
+.citation-chunk-text { font-size: 12px; color: #475569; line-height: 1.5; white-space: pre-wrap; word-break: break-word; max-height: 80px; overflow-y: auto; }
 
 .reasoning.collapsed .reasoning-content {
   display: none;
