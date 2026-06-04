@@ -104,11 +104,15 @@ export function useConversation(isLoggedIn: boolean) {
             const updated = [...prev]
             const last = updated[updated.length - 1]
             if (last.role === 'assistant') {
-              // 从 done 事件中解析检索结果：每行 "文件名|片段"
+              // 从 done 事件中解析检索结果：每行 "文档名|chunk序号|分数|片段内容"
               const traces = docs.length > 0
                 ? docs.map(line => {
-                    const [name, snippet] = line.split('|')
-                    return { documentName: name || line, chunkIndex: 0, contentSnippet: snippet || '' }
+                    const parts = line.split('|')
+                    const name = parts[0] || line
+                    const chunkIndex = parseInt(parts[1]) || 0
+                    const score = parseFloat(parts[2]) || 0
+                    const snippet = parts[3] || ''
+                    return { documentName: name, chunkIndex, score, contentSnippet: snippet }
                   })
                 : undefined
               updated[updated.length - 1] = {

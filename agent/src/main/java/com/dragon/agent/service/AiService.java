@@ -133,8 +133,15 @@ public class AiService {
         if (rag.isEmpty())
             return "";
         return rag.traces().stream()
-                .map(t -> t.get("documentName") + "|" + ((String) t.get("contentSnippet")).replace("\n", " ")
-                        .replace("\r", " "))
+                .map(t -> {
+                    String name = (String) t.getOrDefault("documentName", "未知");
+                    String snippet = ((String) t.getOrDefault("contentSnippet", "")).replace("\n", " ").replace("\r", " ");
+                    Object score = t.get("score");
+                    Object chunkIdx = t.get("chunkIndex");
+                    String scoreStr = score != null ? String.format("%.4f", (Double) score) : "";
+                    String idxStr = chunkIdx != null ? chunkIdx.toString() : "";
+                    return name + "|" + idxStr + "|" + scoreStr + "|" + snippet;
+                })
                 .reduce((a, b) -> a + "\n" + b).orElse("");
     }
 
