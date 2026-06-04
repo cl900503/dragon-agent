@@ -146,11 +146,26 @@ export default function MessageBubble({ message }: Props) {
           <div className="feedback-row">
             <span className="feedback-label">检索质量如何？</span>
             {feedback ? (
-              <span className="feedback-done">{feedback === 'USEFUL' ? '👍 感谢反馈' : '👎 感谢反馈'}</span>
+              <span className="feedback-done">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{verticalAlign:'middle',marginRight:4}}>
+                  <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z"/><path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>
+                </svg>
+                感谢反馈
+              </span>
             ) : (
               <>
-                <button className="feedback-btn" onClick={() => submitFeedback('USEFUL')} title="有用">👍 有用</button>
-                <button className="feedback-btn" onClick={() => submitFeedback('USELESS')} title="无用">👎 无用</button>
+                <button className="feedback-btn" onClick={() => submitFeedback('USEFUL')} title="检索结果有帮助">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{verticalAlign:'middle',marginRight:3}}>
+                    <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z"/><path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>
+                  </svg>
+                  有用
+                </button>
+                <button className="feedback-btn" onClick={() => submitFeedback('USELESS')} title="检索结果无帮助">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{verticalAlign:'middle',marginRight:3,transform:'rotate(180deg)'}}>
+                    <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z"/><path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>
+                  </svg>
+                  无用
+                </button>
               </>
             )}
           </div>
