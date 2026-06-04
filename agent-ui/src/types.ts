@@ -12,8 +12,8 @@ export interface Message {
   content: string
   reasoning: string
   thinking: boolean
-  /** RAG 检索追溯（仅 USER 消息有值） */
   retrievalTraces?: RetrievalTraceItem[]
+  feedback?: string  // null=未反馈, 'USEFUL'|'USELESS'|'done'
 }
 
 export interface RetrievalTraceItem {

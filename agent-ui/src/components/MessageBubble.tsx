@@ -16,13 +16,10 @@ interface Props {
  * @author 陈龙
  * @since 2026-05-31
  */
-// 会话级反馈记忆——避免切换页面后重复反馈
-const feedbackCache = new Map<string, string>()
-
 export default function MessageBubble({ message }: Props) {
   const [reasoningOpen, setReasoningOpen] = useState(true)
   const [traceOpen, setTraceOpen] = useState(false)
-  const [feedback, setFeedback] = useState<string | null>(() => feedbackCache.get(message.id) || null)
+  const [feedback, setFeedback] = useState<string | null>(() => message.feedback || null)
 
   const submitFeedback = async (rating: string) => {
     try {
@@ -30,8 +27,8 @@ export default function MessageBubble({ message }: Props) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messageId: message.id, rating })
       })
-      if (r.ok) { feedbackCache.set(message.id, rating); setFeedback(rating) }
-      else if (r.status === 409) { feedbackCache.set(message.id, 'done'); setFeedback('done') }
+      if (r.ok) { message.feedback = rating; setFeedback(rating) }
+      else if (r.status === 409) { setFeedback('done') }
     } catch { /* */ }
   }
 
@@ -145,13 +142,12 @@ export default function MessageBubble({ message }: Props) {
         {message.role === 'assistant' && message.content && message.retrievalTraces && message.retrievalTraces.length > 0 && (
           <div className="feedback-row">
             <span className="feedback-label">检索质量如何？</span>
-            {feedback ? (
-              <span className="feedback-done">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{verticalAlign:'middle',marginRight:4}}>
-                  <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z"/><path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>
-                </svg>
-                感谢反馈
-              </span>
+            {feedback === 'USEFUL' ? (
+              <span className="feedback-done feedback-useful">✓ 已标记为有用</span>
+            ) : feedback === 'USELESS' ? (
+              <span className="feedback-done feedback-useless">✗ 已标记为无用</span>
+            ) : feedback === 'done' ? (
+              <span className="feedback-done">已反馈</span>
             ) : (
               <>
                 <button className="feedback-btn" onClick={() => submitFeedback('USEFUL')} title="检索结果有帮助">

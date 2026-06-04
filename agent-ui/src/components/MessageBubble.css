@@ -131,7 +131,9 @@
 .feedback-label { color: #94a3b8; }
 .feedback-btn { padding: 4px 12px; border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; color: #64748b; font-size: 12px; cursor: pointer; font-family: inherit; transition: all 0.15s; }
 .feedback-btn:hover { border-color: #4f46e5; color: #4f46e5; background: #eef2ff; }
-.feedback-done { color: #16a34a; font-weight: 500; }
+.feedback-done { font-weight: 500; font-size: 12px; }
+.feedback-useful { color: #16a34a; }
+.feedback-useless { color: #ef4444; }
 
 .reasoning.collapsed .reasoning-content {
   display: none;

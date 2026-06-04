@@ -200,6 +200,20 @@ export function useConversation(isLoggedIn: boolean) {
             mapped[i].retrievalTraces = mapped[i - 1].retrievalTraces
           }
         }
+        // 批量查询已有反馈
+        const aiWithTraces = mapped.filter(m => m.role === 'assistant' && m.retrievalTraces?.length)
+        if (aiWithTraces.length > 0) {
+          try {
+            const ids = aiWithTraces.map(m => m.id).join(',')
+            const r = await fetch(`/api/rag/feedback/batch?ids=${encodeURIComponent(ids)}`)
+            if (r.ok) {
+              const feedbacks = await r.json()
+              for (const m of mapped) {
+                if (m.id in feedbacks) m.feedback = feedbacks[m.id]
+              }
+            }
+          } catch {}
+        }
         setAllMessages(prev => ({ ...prev, [id]: mapped }))
         setMessages(mapped)
         setActiveConversationId(id)

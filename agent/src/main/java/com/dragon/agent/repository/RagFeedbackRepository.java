@@ -1,6 +1,7 @@
 package com.dragon.agent.repository;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -11,6 +12,8 @@ import com.dragon.agent.entity.RagFeedback;
 public interface RagFeedbackRepository extends JpaRepository<RagFeedback, Long> {
 
     List<RagFeedback> findByMessageId(String messageId);
+
+    Optional<RagFeedback> findByMessageIdAndUserId(String messageId, Long userId);
 
     boolean existsByMessageIdAndUserId(String messageId, Long userId);
 

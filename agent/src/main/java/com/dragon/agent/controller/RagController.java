@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.dragon.agent.entity.RagFeedback;
@@ -98,6 +99,24 @@ public class RagController {
             result.put("feedbackUseful", useful);
             result.put("feedbackRate", total > 0 ? String.format("%.1f%%", 100.0 * useful / total) : "N/A");
 
+            return ResponseEntity.ok(result);
+        });
+    }
+
+    /** 批量查询反馈状态（用于页面加载时恢复反馈展示） */
+    @GetMapping("/feedback/batch")
+    public Mono<ResponseEntity<Map<String, String>>> batchFeedback(@RequestParam(name = "ids") String ids) {
+        return securityHelper.currentUsername().map(username -> {
+            var user = userRepository.findByUsername(username).orElse(null);
+            if (user == null) return ResponseEntity.status(401).body(Map.of());
+            String[] idArray = ids.split(",");
+            Map<String, String> result = new LinkedHashMap<>();
+            for (String msgId : idArray) {
+                String trimmed = msgId.trim();
+                if (trimmed.isEmpty()) continue;
+                var existing = feedbackRepository.findByMessageIdAndUserId(trimmed, user.getId());
+                result.put(trimmed, existing.map(f -> f.getRating().name()).orElse(null));
+            }
             return ResponseEntity.ok(result);
         });
     }
