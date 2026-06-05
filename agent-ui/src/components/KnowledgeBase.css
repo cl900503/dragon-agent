@@ -15,8 +15,9 @@
 /* 上传 */
 .kb-drop { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 24px; border: 2px dashed #e2e8f0; border-radius: 12px; cursor: pointer; transition: all 0.2s; margin-bottom: 14px; }
 .kb-drop:hover, .kb-drop-over { border-color: #4f46e5; background: #eef2ff; }
-.kb-drop-disabled { border-color: #e2e8f0; background: #f8fafc; cursor: default; }
+.kb-drop-disabled { border-color: #e2e8f0; background: #f8fafc; cursor: not-allowed; pointer-events: none; opacity: 0.6; }
 .kb-drop-disabled .kb-drop-text { color: #94a3b8; }
+.kb-drop-disabled .kb-drop-icon { filter: grayscale(1); }
 .kb-drop-icon { font-size: 26px; }
 .kb-drop-text { font-size: 14px; color: #334155; font-weight: 500; }
 .kb-drop-hint { font-size: 12px; color: #94a3b8; }
