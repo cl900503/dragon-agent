@@ -172,30 +172,26 @@ export default function KnowledgeBase({ documents, onDocumentsChange, activeKbId
 
       {error && <div className="kb-error"><span>{error}</span><button onClick={() => setError(null)}>✕</button></div>}
 
-      {/* 上传区 —— 必须选中知识库且有上传权限 */}
-      {activeKbId && canUpload !== false ? (
-        <div className={`kb-drop${dragOver ? ' kb-drop-over' : ''}`}
-          onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} onClick={() => fileInputRef.current?.click()}>
-          <span className="kb-drop-icon">📤</span>
-          <span className="kb-drop-text">拖拽文件到此处或点击上传</span>
-          <span className="kb-drop-hint">支持 PDF、Word、Excel、PPT、TXT 等格式</span>
-          <input ref={fileInputRef} type="file" hidden multiple
-            accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.csv,.json,.java,.py,.c,.cpp,.js,.ts,.html,.css,.xml,.yaml,.yml,.log"
-            onChange={e => { if (e.target.files) { handleFiles(e.target.files); e.target.value = '' } }} />
-        </div>
-      ) : activeKbId ? (
-        <div className="kb-drop kb-drop-disabled">
-          <span className="kb-drop-icon">🔒</span>
-          <span className="kb-drop-text">您没有上传权限</span>
-          <span className="kb-drop-hint">仅知识库所有者和管理员可上传文档</span>
-        </div>
-      ) : (
-        <div className="kb-drop kb-drop-disabled">
-          <span className="kb-drop-icon">📂</span>
-          <span className="kb-drop-text">请先在左侧选择或新建一个知识库</span>
-          <span className="kb-drop-hint">所有文档必须归属于一个知识库</span>
-        </div>
-      )}
+      {/* 上传区 —— 必须选中知识库后才显示 */}
+      {activeKbId ? (
+        canUpload !== false ? (
+          <div className={`kb-drop${dragOver ? ' kb-drop-over' : ''}`}
+            onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} onClick={() => fileInputRef.current?.click()}>
+            <span className="kb-drop-icon">📤</span>
+            <span className="kb-drop-text">拖拽文件到此处或点击上传</span>
+            <span className="kb-drop-hint">支持 PDF、Word、Excel、PPT、TXT 等格式</span>
+            <input ref={fileInputRef} type="file" hidden multiple
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.csv,.json,.java,.py,.c,.cpp,.js,.ts,.html,.css,.xml,.yaml,.yml,.log"
+              onChange={e => { if (e.target.files) { handleFiles(e.target.files); e.target.value = '' } }} />
+          </div>
+        ) : (
+          <div className="kb-drop kb-drop-disabled">
+            <span className="kb-drop-icon">🔒</span>
+            <span className="kb-drop-text">您没有上传权限</span>
+            <span className="kb-drop-hint">仅知识库所有者和管理员可上传文档</span>
+          </div>
+        )
+      ) : null}
 
       {!activeKbId ? (
         <div className="kb-empty"><span className="kb-empty-icon">👈</span><p>选择左侧知识库开始管理文档</p></div>
