@@ -146,8 +146,8 @@ public class RagSearchService {
                     : doc.getScore() != null ? doc.getScore() : 0.0);
             String text = doc.getText();
             trace.put("contentSnippet",
-                    text != null && text.length() > 200
-                            ? text.substring(0, 200) + "..."
+                    text != null && text.length() > 500
+                            ? text.substring(0, 500) + "..."
                             : text);
             traces.add(trace);
         }
