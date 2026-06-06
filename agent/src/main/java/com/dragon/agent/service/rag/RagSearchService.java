@@ -84,8 +84,9 @@ public class RagSearchService {
             }
 
             @SuppressWarnings("unchecked")
+            Map<String, Object> sparseVec = (Map<String, Object>) emb.get("sparse");
             List<Map<String, Object>> raw = hybridSearch.hybridSearch(
-                    (List<Double>) emb.get("dense"), filter.toString(), searchLimit);
+                    (List<Double>) emb.get("dense"), sparseVec, filter.toString(), searchLimit);
             long retrievalMs = System.currentTimeMillis() - start;
 
             if (raw.isEmpty()) {

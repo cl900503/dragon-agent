@@ -70,9 +70,44 @@ public class ConversationService {
         return conversationId;
     }
 
-    /** 返回含 reasoning + retrieval trace 的完整消息历史 */
+    /**
+     * 返回含推理链和检索追溯的完整消息历史。
+     *
+     * <p>使用批量查询替代逐条 N+1 查询，减少数据库往返次数。</p>
+     */
     public List<Map<String, Object>> getMessages(String conversationId) {
         List<MessageEntity> messages = messageRepository.findByConversationIdOrderByCreatedAtAsc(conversationId);
+        if (messages.isEmpty()) {
+            return List.of();
+        }
+
+        List<String> msgIds = messages.stream().map(MessageEntity::getId).toList();
+        List<String> assistantMsgIds = new ArrayList<>();
+        List<String> userMsgIds = new ArrayList<>();
+        for (MessageEntity msg : messages) {
+            if ("ASSISTANT".equals(msg.getRole())) {
+                assistantMsgIds.add(msg.getId());
+            } else if ("USER".equals(msg.getRole())) {
+                userMsgIds.add(msg.getId());
+            }
+        }
+
+        // 批量加载推理链
+        Map<String, String> reasoningByMsgId = new LinkedHashMap<>();
+        if (!assistantMsgIds.isEmpty()) {
+            for (var rt : reasoningTraceRepository.findByMessageIdIn(assistantMsgIds)) {
+                reasoningByMsgId.put(rt.getMessageId(), rt.getContent());
+            }
+        }
+
+        // 批量加载检索追溯
+        Map<String, List<RetrievalTrace>> retrievalByMsgId = new LinkedHashMap<>();
+        if (!userMsgIds.isEmpty()) {
+            for (var rt : retrievalTraceRepository.findByMessageIdIn(userMsgIds)) {
+                retrievalByMsgId.computeIfAbsent(rt.getMessageId(), k -> new ArrayList<>()).add(rt);
+            }
+        }
+
         List<Map<String, Object>> result = new ArrayList<>();
         for (MessageEntity msg : messages) {
             Map<String, Object> item = new LinkedHashMap<>();
@@ -80,26 +115,25 @@ public class ConversationService {
             item.put("messageType", msg.getRole());
             item.put("text", msg.getContent());
 
-            if ("ASSISTANT".equals(msg.getRole())) {
-                reasoningTraceRepository.findByMessageId(msg.getId())
-                        .ifPresent(rt -> item.put("reasoning", rt.getContent()));
+            String reasoning = reasoningByMsgId.get(msg.getId());
+            if (reasoning != null) {
+                item.put("reasoning", reasoning);
             }
 
-            if ("USER".equals(msg.getRole())) {
-                List<RetrievalTrace> retrievals = retrievalTraceRepository.findByMessageId(msg.getId());
-                if (!retrievals.isEmpty()) {
-                    List<Map<String, Object>> rtList = new ArrayList<>();
-                    for (RetrievalTrace rt : retrievals) {
-                        Map<String, Object> r = new LinkedHashMap<>();
-                        r.put("documentName", rt.getDocumentName());
-                        r.put("chunkIndex", rt.getChunkIndex());
-                        r.put("contentSnippet", rt.getContentSnippet());
-                        if (rt.getScore() != null)
-                            r.put("score", rt.getScore());
-                        rtList.add(r);
+            List<RetrievalTrace> retrievals = retrievalByMsgId.get(msg.getId());
+            if (retrievals != null && !retrievals.isEmpty()) {
+                List<Map<String, Object>> rtList = new ArrayList<>();
+                for (RetrievalTrace rt : retrievals) {
+                    Map<String, Object> r = new LinkedHashMap<>();
+                    r.put("documentName", rt.getDocumentName());
+                    r.put("chunkIndex", rt.getChunkIndex());
+                    r.put("contentSnippet", rt.getContentSnippet());
+                    if (rt.getScore() != null) {
+                        r.put("score", rt.getScore());
                     }
-                    item.put("retrievalTraces", rtList);
+                    rtList.add(r);
                 }
+                item.put("retrievalTraces", rtList);
             }
             result.add(item);
         }

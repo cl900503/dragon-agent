@@ -108,11 +108,35 @@ public class HybridSearchService {
         catch (Exception e) { log.error("Delete failed: {}", e.getMessage()); }
     }
 
-    public List<Map<String, Object>> hybridSearch(List<Double> denseVec, String filter, int topK) {
+    /**
+     * Hybrid Search——Dense + Sparse 双路检索，WeightedRanker 融合。
+     *
+     * @param denseVec  BGE-M3 稠密向量（1024 维）
+     * @param sparse    BGE-M3 稀疏向量（{indices: [...], values: [...]} 格式），可为 null
+     * @param filter    Milvus 过滤表达式
+     * @param topK      返回结果数
+     */
+    @SuppressWarnings("unchecked")
+    public List<Map<String, Object>> hybridSearch(List<Double> denseVec, Map<String, Object> sparse,
+            String filter, int topK) {
         try {
             FloatVec dv = new FloatVec(denseVec.stream().map(Double::floatValue).collect(Collectors.toList()));
-            SortedMap<Long, Float> sparseMap = new TreeMap<>(); sparseMap.put(0L, 1.0f);
-            SparseFloatVec sv = new SparseFloatVec(sparseMap);
+
+            // 使用 BGE-M3 真实稀疏向量，不可用时用 dummy 兜底
+            SparseFloatVec sv;
+            if (sparse != null && sparse.containsKey("indices") && sparse.containsKey("values")) {
+                List<Integer> indices = (List<Integer>) sparse.get("indices");
+                List<Double> values = (List<Double>) sparse.get("values");
+                SortedMap<Long, Float> sparseMap = new TreeMap<>();
+                for (int i = 0; i < indices.size(); i++) {
+                    sparseMap.put(indices.get(i).longValue(), values.get(i).floatValue());
+                }
+                sv = new SparseFloatVec(sparseMap);
+            } else {
+                SortedMap<Long, Float> dummyMap = new TreeMap<>();
+                dummyMap.put(0L, 1.0f);
+                sv = new SparseFloatVec(dummyMap);
+            }
 
             String f = (filter != null && !filter.isBlank()) ? filter : null;
             AnnSearchReq denseReq = AnnSearchReq.builder().vectorFieldName("dense_vector").vectors(List.of(dv))

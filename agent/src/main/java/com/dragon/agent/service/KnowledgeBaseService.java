@@ -133,10 +133,16 @@ public class KnowledgeBaseService {
         if (user == null) return List.of();
 
         List<KnowledgeBaseEntity> all = kbRepository.findAll();
-        // 批量加载 owner 名称，避免 N+1
+        // 批量加载 owner 名称
         var ownerIds = all.stream().map(KnowledgeBaseEntity::getOwnerId).collect(java.util.stream.Collectors.toSet());
         Map<Long, String> ownerNames = userRepository.findAllById(ownerIds).stream()
                 .collect(java.util.stream.Collectors.toMap(u -> u.getId(), u -> u.getUsername()));
+        // 批量加载部门名称
+        var deptIds = all.stream().map(KnowledgeBaseEntity::getDepartmentId)
+                .filter(id -> id != null).collect(java.util.stream.Collectors.toSet());
+        Map<Long, String> deptNames = deptIds.isEmpty() ? Map.of()
+                : departmentRepository.findAllById(deptIds).stream()
+                        .collect(java.util.stream.Collectors.toMap(d -> d.getId(), d -> d.getName()));
 
         List<Map<String, Object>> result = new ArrayList<>();
         for (KnowledgeBaseEntity kb : all) {
@@ -150,11 +156,9 @@ public class KnowledgeBaseService {
                 item.put("ownerName", ownerNames.getOrDefault(kb.getOwnerId(), ""));
                 item.put("departmentId", kb.getDepartmentId());
                 if (kb.getDepartmentId() != null) {
-                    departmentRepository.findById(kb.getDepartmentId())
-                            .ifPresent(d -> item.put("departmentName", d.getName()));
+                    item.put("departmentName", deptNames.get(kb.getDepartmentId()));
                 }
                 item.put("createdAt", kb.getCreatedAt().toString());
-                // 文档计数——KB 数量不会很多，逐个查可接受
                 item.put("docCount", documentRepository.countByKbId(kb.getId()));
                 item.put("canUpload", canWrite(kb.getId(), username));
                 result.add(item);
