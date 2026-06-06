@@ -9,9 +9,10 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 /**
- * 部门实体——组织架构基础。
+ * 部门实体——组织架构基础，支持树形层级。
  *
  * @author 陈龙
  * @since 2026-06-03
@@ -32,6 +33,9 @@ public class DepartmentEntity {
 
     @Column(length = 500)
     private String path;
+
+    @Version
+    private Long version;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

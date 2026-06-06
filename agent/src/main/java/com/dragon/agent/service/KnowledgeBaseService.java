@@ -14,7 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.dragon.agent.entity.KnowledgeBaseEntity;
-import com.dragon.agent.entity.KnowledgeBaseEntity.KbVisibility;
+import com.dragon.agent.enums.KbVisibility;
 import com.dragon.agent.entity.UserEntity;
 import com.dragon.agent.repository.KnowledgeBaseRepository;
 import com.dragon.agent.repository.UserRepository;

@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.dragon.agent.entity.KnowledgeBaseEntity;
+import com.dragon.agent.enums.KbVisibility;
 import com.dragon.agent.service.KnowledgeBaseService;
 import com.dragon.agent.support.SecurityHelper;
 
@@ -46,7 +46,7 @@ public class KnowledgeBaseController {
                 String name = (String) body.get("name");
                 String desc = (String) body.getOrDefault("description", "");
                 String visStr = (String) body.getOrDefault("visibility", "PRIVATE");
-                KnowledgeBaseEntity.KbVisibility visibility = KnowledgeBaseEntity.KbVisibility.valueOf(visStr);
+                KbVisibility visibility = KbVisibility.valueOf(visStr);
                 Long deptId = body.get("departmentId") != null ? Long.valueOf(body.get("departmentId").toString()) : null;
                 Integer chunkSize = body.get("chunkSize") != null ? Integer.valueOf(body.get("chunkSize").toString()) : null;
                 Integer chunkOverlap = body.get("chunkOverlap") != null ? Integer.valueOf(body.get("chunkOverlap").toString()) : null;

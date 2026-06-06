@@ -7,17 +7,27 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
+
+import com.dragon.agent.enums.KbVisibility;
 
 /**
- * 知识库实体——按部门/业务域组织的文档集合。
+ * 知识库实体——按部门或业务域组织的文档集合。
+ *
+ * <p>department 在创建时冻结——owner 后续调岗不影响 KB 的部门归属。</p>
  *
  * @author 陈龙
  * @since 2026-06-03
  */
 @Entity
-@Table(name = "knowledge_bases")
+@Table(name = "knowledge_bases", indexes = {
+        @Index(name = "idx_kb_visibility", columnList = "visibility"),
+        @Index(name = "idx_kb_dept", columnList = "department_id"),
+        @Index(name = "idx_kb_owner", columnList = "owner_id")
+})
 public class KnowledgeBaseEntity {
 
     @Id
@@ -33,7 +43,6 @@ public class KnowledgeBaseEntity {
     @Column(name = "owner_id", nullable = false)
     private Long ownerId;
 
-    /** 创建时冻结的部门 ID——owner 后续调岗不影响 KB 的部门归属 */
     @Column(name = "department_id")
     private Long departmentId;
 
@@ -47,17 +56,18 @@ public class KnowledgeBaseEntity {
     @Column(name = "chunk_overlap")
     private Integer chunkOverlap;
 
+    @Version
+    private Long version;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
     @PrePersist
     void prePersist() {
-        if (createdAt == null)
-            createdAt = Instant.now();
+        if (createdAt == null) createdAt = Instant.now();
     }
 
-    public KnowledgeBaseEntity() {
-    }
+    public KnowledgeBaseEntity() {}
 
     public KnowledgeBaseEntity(String id, String name, Long ownerId, KbVisibility visibility) {
         this.id = id;
@@ -84,9 +94,4 @@ public class KnowledgeBaseEntity {
     public void setChunkOverlap(Integer chunkOverlap) { this.chunkOverlap = chunkOverlap; }
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
-
-    /** 知识库可见性 */
-    public enum KbVisibility {
-        PRIVATE, DEPARTMENT, COMPANY
-    }
 }

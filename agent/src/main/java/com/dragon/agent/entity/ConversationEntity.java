@@ -7,11 +7,10 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 /**
- * 会话实体，对应 MySQL conversations 表。
- *
- * 记录每个会话的归属用户和创建时间，实现用户级会话隔离。
+ * 会话实体——记录每个会话的归属用户和创建时间，实现用户级会话隔离。
  *
  * @author 陈龙
  * @since 2026-06-01
@@ -30,14 +29,15 @@ public class ConversationEntity {
     @Column(length = 100)
     private String title;
 
+    @Version
+    private Long version;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
     @PrePersist
     void prePersist() {
-        if (createdAt == null) {
-            createdAt = Instant.now();
-        }
+        if (createdAt == null) createdAt = Instant.now();
     }
 
     public ConversationEntity() {}
@@ -48,35 +48,12 @@ public class ConversationEntity {
         this.title = title;
     }
 
-    public String getId() {
-        return id;
-    }
-
-    public Long getUserId() {
-        return userId;
-    }
-
-    public String getTitle() {
-        return title;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setId(String id) {
-        this.id = id;
-    }
-
-    public void setUserId(Long userId) {
-        this.userId = userId;
-    }
-
-    public void setTitle(String title) {
-        this.title = title;
-    }
-
-    public void setCreatedAt(Instant createdAt) {
-        this.createdAt = createdAt;
-    }
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
+    public Long getUserId() { return userId; }
+    public void setUserId(Long userId) { this.userId = userId; }
+    public String getTitle() { return title; }
+    public void setTitle(String title) { this.title = title; }
+    public Instant getCreatedAt() { return createdAt; }
+    public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
 }

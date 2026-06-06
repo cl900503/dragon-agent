@@ -7,17 +7,20 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 
 /**
- * RAG 检索日志——记录每次检索请求的关键指标，用于质量分析和优化。
+ * RAG 检索日志——记录每次检索的关键指标，用于质量分析。
  *
  * @author 陈龙
  * @since 2026-06-04
  */
 @Entity
-@Table(name = "rag_search_logs")
+@Table(name = "rag_search_logs", indexes = {
+        @Index(name = "idx_searchlog_user_time", columnList = "user_id,created_at")
+})
 public class RagSearchLog {
 
     @Id
@@ -45,7 +48,7 @@ public class RagSearchLog {
     @Column(name = "duration_ms")
     private Long durationMs;
 
-    @Column(name = "hit", nullable = false)
+    @Column(name = "hit", nullable = false, columnDefinition = "TINYINT(1)")
     private boolean hit;
 
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -56,8 +59,8 @@ public class RagSearchLog {
 
     public RagSearchLog() {}
 
-    public RagSearchLog(Long userId, String query, String kbIds, int resultCount, Double topScore, Double avgScore,
-            long durationMs, boolean hit) {
+    public RagSearchLog(Long userId, String query, String kbIds, int resultCount,
+            Double topScore, Double avgScore, long durationMs, boolean hit) {
         this.userId = userId;
         this.query = query;
         this.kbIds = kbIds;

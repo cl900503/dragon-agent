@@ -7,17 +7,22 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 /**
- * 用户实体，对应 MySQL users 表。
+ * 用户实体——对应 MySQL users 表。
  *
  * @author 陈龙
  * @since 2026-06-01
  */
 @Entity
-@Table(name = "users")
+@Table(name = "users", indexes = {
+        @Index(name = "idx_users_role", columnList = "role"),
+        @Index(name = "idx_users_dept", columnList = "department_id")
+})
 public class UserEntity {
 
     @Id
@@ -45,14 +50,15 @@ public class UserEntity {
     @Column(length = 20)
     private String status;
 
+    @Version
+    private Long version;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
     @PrePersist
     void prePersist() {
-        if (createdAt == null) {
-            createdAt = Instant.now();
-        }
+        if (createdAt == null) createdAt = Instant.now();
     }
 
     public UserEntity() {}
@@ -62,35 +68,12 @@ public class UserEntity {
         this.passwordHash = passwordHash;
     }
 
-    public Long getId() {
-        return id;
-    }
-
-    public String getUsername() {
-        return username;
-    }
-
-    public String getPasswordHash() {
-        return passwordHash;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public void setUsername(String username) {
-        this.username = username;
-    }
-
-    public void setPasswordHash(String passwordHash) {
-        this.passwordHash = passwordHash;
-    }
-
-    public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    public String getUsername() { return username; }
+    public void setUsername(String username) { this.username = username; }
+    public String getPasswordHash() { return passwordHash; }
+    public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
     public String getDisplayName() { return displayName; }
     public void setDisplayName(String displayName) { this.displayName = displayName; }
     public String getEmail() { return email; }
@@ -101,4 +84,6 @@ public class UserEntity {
     public void setDepartmentId(Long departmentId) { this.departmentId = departmentId; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+    public Instant getCreatedAt() { return createdAt; }
+    public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
 }

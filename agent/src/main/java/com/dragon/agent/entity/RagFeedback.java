@@ -11,15 +11,20 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 
 /**
- * RAG 检索反馈——记录用户对 AI 回复的检索质量评价。
+ * RAG 检索反馈——记录用户对检索质量的评价。
+ *
+ * <p>唯一约束 (message_id, user_id) 保证同一用户对同一消息只能反馈一次。</p>
  *
  * @author 陈龙
  * @since 2026-06-04
  */
 @Entity
-@Table(name = "rag_feedback")
+@Table(name = "rag_feedback", uniqueConstraints = {
+        @UniqueConstraint(name = "uq_feedback_msg_user", columnNames = {"message_id", "user_id"})
+})
 public class RagFeedback {
 
     @Id

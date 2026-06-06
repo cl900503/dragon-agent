@@ -10,14 +10,15 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 
 /**
- * 聊天消息（ChatMemory）——基础消息表。
+ * 聊天消息实体——对应 MySQL chat_messages 表。
  *
  * @author 陈龙
  * @since 2026-06-01
  */
 @Entity
 @Table(name = "chat_messages", indexes = {
-        @Index(name = "idx_msg_conversation", columnList = "conversation_id,created_at")})
+        @Index(name = "idx_msg_conversation", columnList = "conversation_id,created_at")
+})
 public class MessageEntity {
 
     @Id
@@ -28,7 +29,7 @@ public class MessageEntity {
     private String conversationId;
 
     @Column(nullable = false, length = 10)
-    private String role; // USER / ASSISTANT
+    private String role;
 
     @Column(columnDefinition = "TEXT", nullable = false)
     private String content;
@@ -38,8 +39,7 @@ public class MessageEntity {
 
     @PrePersist
     void prePersist() {
-        if (createdAt == null)
-            createdAt = Instant.now();
+        if (createdAt == null) createdAt = Instant.now();
     }
 
     public MessageEntity() {}
@@ -51,43 +51,14 @@ public class MessageEntity {
         this.content = content;
     }
 
-    public String getId() {
-        return id;
-    }
-
-    public void setId(String id) {
-        this.id = id;
-    }
-
-    public String getConversationId() {
-        return conversationId;
-    }
-
-    public void setConversationId(String conversationId) {
-        this.conversationId = conversationId;
-    }
-
-    public String getRole() {
-        return role;
-    }
-
-    public void setRole(String role) {
-        this.role = role;
-    }
-
-    public String getContent() {
-        return content;
-    }
-
-    public void setContent(String content) {
-        this.content = content;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(Instant createdAt) {
-        this.createdAt = createdAt;
-    }
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
+    public String getConversationId() { return conversationId; }
+    public void setConversationId(String conversationId) { this.conversationId = conversationId; }
+    public String getRole() { return role; }
+    public void setRole(String role) { this.role = role; }
+    public String getContent() { return content; }
+    public void setContent(String content) { this.content = content; }
+    public Instant getCreatedAt() { return createdAt; }
+    public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
 }
