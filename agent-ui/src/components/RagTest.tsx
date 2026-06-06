@@ -117,7 +117,7 @@ export default function RagTest() {
                 flex: t.score,
                 opacity: 0.3 + (t.score / maxScore) * 0.7,
               }}
-              title={`#${i + 1} ${t.documentName} score=${t.score.toFixed(4)}`}
+              title={`#${i + 1} ${t.documentName} 相似度 ${(t.score * 100).toFixed(1)}%`}
             />
           ))}
           <span className="rt-score-label">分数分布</span>
@@ -136,7 +136,7 @@ export default function RagTest() {
                   <span className="rt-chunk-doc">{t.documentName}</span>
                   <span className="rt-chunk-idx">chunk {t.chunkIndex}</span>
                   <span className={`rt-score ${t.score > 0.5 ? 'rt-score-hi' : t.score > 0.2 ? 'rt-score-md' : 'rt-score-lo'}`}>
-                    {t.score.toFixed(4)}
+                    相似度 {(t.score * 100).toFixed(1)}%
                   </span>
                   <span className="rt-chunk-toggle">{expandedChunks.has(i) ? '▲' : '▼'}</span>
                 </div>
@@ -145,7 +145,7 @@ export default function RagTest() {
                     <div className="rt-chunk-meta">
                       <span>文档: {t.documentName}</span>
                       <span>chunk #{t.chunkIndex}</span>
-                      <span>分数: {t.score.toFixed(6)}</span>
+                      <span>相似度: {(t.score * 100).toFixed(1)}%</span>
                     </div>
                     <pre className="rt-chunk-text">{t.contentSnippet}</pre>
                   </div>
