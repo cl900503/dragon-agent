@@ -62,16 +62,6 @@ services:
     depends_on:
       - milvus
 
-  tei-embedding:
-    image: ghcr.io/huggingface/text-embeddings-inference:cpu-latest
-    container_name: dragon-tei-embedding
-    command: --model-id BAAI/bge-m3 --revision main
-    ports:
-      - "8081:80"
-    volumes:
-      - tei_data:/data
-    restart: unless-stopped
-
   tei-reranker:
     image: ghcr.io/huggingface/text-embeddings-inference:cpu-latest
     container_name: dragon-tei-reranker
@@ -105,5 +95,4 @@ volumes:
   milvus_data:
   minio_data:
   etcd_data:
-  tei_data:
   tei_reranker_data:

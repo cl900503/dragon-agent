@@ -59,31 +59,48 @@ npm run dev
 | Milvus 2.5.4 | 19530 | 向量数据库（Attu: 8000） |
 | etcd | 2379 | Milvus 元数据 |
 | MinIO | 9000/9001 | 对象存储 / 控制台 |
-| TEI Reranker | 8082 | BGE-Reranker-v2-m3 |
+| TEI Reranker | 8082 | BGE-Reranker-v2-m3 重排序模型 |
+
+BGE-M3 Embedding 服务由本地 Python 脚本提供，不依赖 Docker Compose（见下方 BGE-M3-server 说明）。
+
+## BGE-M3-server
+
+BGE-M3 Embedding 服务使用 FlagEmbedding 库本地运行，不依赖 Docker。
+
+```bash
+cd BGE-M3-server
+pip install -r requirements.txt
+python server.py
+```
+
+服务监听 `http://localhost:8081`，提供 `/embed` 端点，支持 dense 和 sparse 双路向量输出。
 
 ## 项目结构
 
 ```
-agent/
-  src/main/java/com/dragon/agent/
-    config/          - SecurityConfig, CorsConfig, AuthTokenWebFilter, MinioConfig
-    controller/      - REST 控制器（薄层，仅路由和参数校验）
-    dto/             - 请求/响应 DTO
-    entity/          - JPA 实体
-    enums/           - UserRole, KbVisibility, RagRating
-    exception/       - 全局异常处理
-    repository/      - JPA 仓库
-    service/         - 业务服务
-      rag/           - RAG 基础设施（BgeM3Client, HybridSearchService, RerankService, RagSearchService, ChunkingService）
-      storage/       - MinIO 文件存储
-      parser/        - Tika 文档解析
-    support/         - SecurityHelper
-
-agent-ui/
-  src/
-    api/             - 统一 API 层（client.ts, admin.ts, rag.ts）
-    components/      - React 组件
-    hooks/           - useAuth, useConversation
+├── docker-compose.yml             # 基础设施编排
+├── agent/                         # Spring Boot 后端
+│   └── src/main/java/com/dragon/agent/
+│       ├── config/                # SecurityConfig, CorsConfig, AuthTokenWebFilter, MinioConfig
+│       ├── controller/            # REST 控制器（薄层）
+│       ├── dto/                   # 请求/响应 DTO
+│       ├── entity/                # JPA 实体
+│       ├── enums/                 # UserRole, KbVisibility, RagRating
+│       ├── exception/             # 全局异常处理
+│       ├── repository/            # JPA 仓库
+│       ├── service/               # 业务服务
+│       │   ├── rag/               # RAG 基础设施（BgeM3Client, HybridSearchService, RerankService 等）
+│       │   ├── storage/           # MinIO 文件存储
+│       │   └── parser/            # Tika 文档解析
+│       └── support/               # SecurityHelper
+├── agent-ui/                      # React 前端
+│   └── src/
+│       ├── api/                   # 统一 API 层（client.ts, admin.ts, rag.ts）
+│       ├── components/            # UI 组件
+│       └── hooks/                 # useAuth, useConversation
+└── BGE-M3-server/                 # BGE-M3 本地 Embedding 服务（Python + FlagEmbedding）
+    ├── server.py
+    └── requirements.txt
 ```
 
 ## 角色权限

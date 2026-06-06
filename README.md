@@ -37,10 +37,13 @@
 # 2. 启动基础设施
 docker compose up -d
 
-# 3. 启动后端
+# 3. 启动 BGE-M3 Embedding
+cd BGE-M3-server && pip install -r requirements.txt && python server.py
+
+# 4. 启动后端
 cd agent && mvn spring-boot:run -Dspring-boot.run.profiles=dev
 
-# 4. 启动前端
+# 5. 启动前端
 cd agent-ui && npm install && npm run dev
 ```
 
@@ -58,28 +61,28 @@ cd agent-ui && npm install && npm run dev
 
 ```
 ├── docker-compose.yml
-├── README.md
-├── USAGE.md
 ├── agent/                          # Spring Boot 后端
 │   └── src/main/java/com/dragon/agent/
 │       ├── config/                 # 安全配置、CORS、MinIO
 │       ├── controller/             # REST 控制器（薄层）
 │       ├── dto/                    # 请求/响应 DTO
 │       ├── entity/                 # JPA 实体
-│       ├── enums/                  # 枚举（UserRole, KbVisibility, RagRating）
+│       ├── enums/                  # UserRole, KbVisibility, RagRating
 │       ├── exception/              # 全局异常处理
 │       ├── repository/             # JPA 仓库
 │       ├── service/                # 业务服务
-│       │   ├── rag/                # RAG 基础设施（Embedding/Search/Rerank）
+│       │   ├── rag/                # RAG 基础设施
 │       │   ├── storage/            # MinIO 文件存储
 │       │   └── parser/             # Tika 文档解析
 │       └── support/                # 工具类
-└── agent-ui/                       # React 前端
-    └── src/
-        ├── api/                    # 统一 API 层
-        ├── components/             # UI 组件
-        └── hooks/                  # useAuth, useConversation
-        └── main.tsx
+├── agent-ui/                       # React 前端
+│   └── src/
+│       ├── api/                    # 统一 API 层
+│       ├── components/             # UI 组件
+│       └── hooks/                  # useAuth, useConversation
+└── BGE-M3-server/                  # BGE-M3 本地 Embedding 服务
+    ├── server.py
+    └── requirements.txt
 ```
 
 详细文档见 [USAGE.md](./USAGE.md)。
