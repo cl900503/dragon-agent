@@ -10,7 +10,7 @@
 - KB 可见性：PRIVATE / DEPARTMENT / COMPANY，部门归属创建时冻结
 - 组织架构：部门管理 + 人员管理 + 表格展示 + 分页 + 弹窗编辑
 - RAG 质量：检索反馈 + 检索日志 + 质量分析仪表盘 + 分块策略可配
-- 四大 Trace：ChatMemory / ReasoningTrace / RetrievalTrace / ToolTrace
+- 检索追溯：ChatMemory / ReasoningTrace / RetrievalTrace 全链路记录
 - 检索来源：片段详情展示 + 相似度百分比 + 按文档分组
 - 开发工具：语义检索调试 / 检索质量分析 / 渲染效果预览
 
@@ -20,7 +20,7 @@
 |------|------|
 | 后端框架 | Spring Boot 4.0.6 (WebFlux + Netty) |
 | AI | Spring AI 2.0.0-M8 + DeepSeek |
-| Embedding | BGE-M3 via TEI |
+| Embedding | BGE-M3 本地服务 |
 | 向量数据库 | Milvus 2.5.4 |
 | 对象存储 | MinIO (S3 兼容) |
 | 数据库 | MySQL 8.0 |
@@ -62,21 +62,23 @@ cd agent-ui && npm install && npm run dev
 ├── USAGE.md
 ├── agent/                          # Spring Boot 后端
 │   └── src/main/java/com/dragon/agent/
-│       ├── config/                 # Security, CORS, MinIO
-│       ├── controller/             # Auth, Stream, Conversation, Document, KB, Admin
-│       ├── dto/                    # 数据传输对象
+│       ├── config/                 # 安全配置、CORS、MinIO
+│       ├── controller/             # REST 控制器（薄层）
+│       ├── dto/                    # 请求/响应 DTO
 │       ├── entity/                 # JPA 实体
+│       ├── enums/                  # 枚举（UserRole, KbVisibility, RagRating）
 │       ├── exception/              # 全局异常处理
-│       ├── repository/             # JPA Repository
-│       ├── service/                # 业务逻辑层
-│       │   ├── storage/            # MinIO 文件服务
+│       ├── repository/             # JPA 仓库
+│       ├── service/                # 业务服务
+│       │   ├── rag/                # RAG 基础设施（Embedding/Search/Rerank）
+│       │   ├── storage/            # MinIO 文件存储
 │       │   └── parser/             # Tika 文档解析
-│       └── support/                # SecurityHelper
+│       └── support/                # 工具类
 └── agent-ui/                       # React 前端
     └── src/
+        ├── api/                    # 统一 API 层
         ├── components/             # UI 组件
-        ├── hooks/                  # useAuth, useConversation
-        ├── api.ts / auth.ts / types.ts
+        └── hooks/                  # useAuth, useConversation
         └── main.tsx
 ```
 
