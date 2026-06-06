@@ -53,23 +53,28 @@ public class HybridSearchService {
 
     private void ensureCollection() {
         try {
-            if (client.hasCollection(HasCollectionReq.builder().collectionName(collection).build())) return;
+            boolean existed = client.hasCollection(HasCollectionReq.builder().collectionName(collection).build());
 
-            CreateCollectionReq.CollectionSchema schema = client.createSchema();
-            schema.setEnableDynamicField(true);
-            schema.addField(AddFieldReq.builder().fieldName("id").dataType(DataType.Int64).isPrimaryKey(true).autoID(true).build());
-            schema.addField(AddFieldReq.builder().fieldName("content").dataType(DataType.VarChar).maxLength(8192).enableAnalyzer(true).build());
-            schema.addField(AddFieldReq.builder().fieldName("dense_vector").dataType(DataType.FloatVector).dimension(dim).build());
-            schema.addField(AddFieldReq.builder().fieldName("sparse_vector").dataType(DataType.SparseFloatVector).build());
+            if (!existed) {
+                CreateCollectionReq.CollectionSchema schema = client.createSchema();
+                schema.setEnableDynamicField(true);
+                schema.addField(AddFieldReq.builder().fieldName("id").dataType(DataType.Int64).isPrimaryKey(true).autoID(true).build());
+                schema.addField(AddFieldReq.builder().fieldName("content").dataType(DataType.VarChar).maxLength(8192).enableAnalyzer(true).build());
+                schema.addField(AddFieldReq.builder().fieldName("dense_vector").dataType(DataType.FloatVector).dimension(dim).build());
+                schema.addField(AddFieldReq.builder().fieldName("sparse_vector").dataType(DataType.SparseFloatVector).build());
 
-            client.createCollection(CreateCollectionReq.builder()
-                    .collectionName(collection).collectionSchema(schema).build());
+                client.createCollection(CreateCollectionReq.builder()
+                        .collectionName(collection).collectionSchema(schema).build());
 
-            IndexParam denseIdx = IndexParam.builder().fieldName("dense_vector").indexType(IndexParam.IndexType.HNSW).metricType(IndexParam.MetricType.IP).build();
-            IndexParam sparseIdx = IndexParam.builder().fieldName("sparse_vector").indexType(IndexParam.IndexType.SPARSE_INVERTED_INDEX).metricType(IndexParam.MetricType.IP).build();
-            client.createIndex(CreateIndexReq.builder().collectionName(collection).indexParams(List.of(denseIdx, sparseIdx)).build());
+                IndexParam denseIdx = IndexParam.builder().fieldName("dense_vector").indexType(IndexParam.IndexType.HNSW).metricType(IndexParam.MetricType.COSINE).build();
+                IndexParam sparseIdx = IndexParam.builder().fieldName("sparse_vector").indexType(IndexParam.IndexType.SPARSE_INVERTED_INDEX).metricType(IndexParam.MetricType.IP).build();
+                client.createIndex(CreateIndexReq.builder().collectionName(collection).indexParams(List.of(denseIdx, sparseIdx)).build());
+                log.info("Hybrid collection [{}] created: dense({}d, COSINE)+sparse(IP)", collection, dim);
+            }
+
+            // 每次启动都加载——避免重启后 collection 未加载导致 2004 错误
             client.loadCollection(LoadCollectionReq.builder().collectionName(collection).build());
-            log.info("Hybrid collection [{}] ready: dense({}d)+sparse", collection, dim);
+            log.info("Hybrid collection [{}] loaded into memory", collection);
         } catch (Exception e) { log.error("Collection init failed: {}", e.getMessage()); }
     }
 
@@ -140,7 +145,7 @@ public class HybridSearchService {
 
             String f = (filter != null && !filter.isBlank()) ? filter : null;
             AnnSearchReq denseReq = AnnSearchReq.builder().vectorFieldName("dense_vector").vectors(List.of(dv))
-                    .metricType(IndexParam.MetricType.IP).limit(topK).params("{\"nprobe\":16}")
+                    .metricType(IndexParam.MetricType.COSINE).limit(topK).params("{\"nprobe\":16}")
                     .filter(f).build();
             AnnSearchReq sparseReq = AnnSearchReq.builder().vectorFieldName("sparse_vector").vectors(List.of(sv))
                     .metricType(IndexParam.MetricType.IP).limit(topK).params("{\"drop_ratio_search\":0.2}")
