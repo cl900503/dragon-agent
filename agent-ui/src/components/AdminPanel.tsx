@@ -8,10 +8,9 @@
 import { useState, useEffect, useMemo } from 'react'
 import type { Permissions } from '../hooks/useAuth'
 import { showToast } from './Toast'
+import * as adminApi from '../api/admin'
+import type { UserItem, DeptItem } from '../api/admin'
 import './AdminPanel.css'
-
-interface UserItem { id: number; username: string; displayName: string; email: string; role: string; departmentId: number | null; status: string }
-interface DeptItem { id: number; name: string; parentId: number | null; path: string | null; userCount: number }
 
 interface Props {
   activeDept: string
@@ -39,9 +38,9 @@ export default function AdminPanel({ activeDept, perms, currentUsername, refresh
 
   const loadData = async () => {
     try {
-      const [dr, ur] = await Promise.all([fetch('/api/admin/departments'), fetch('/api/admin/users')])
-      if (dr.ok) setDepts(await dr.json())
-      if (ur.ok) setUsers(await ur.json())
+      const [deps, usrs] = await Promise.all([adminApi.listDepartments(), adminApi.listUsers()])
+      setDepts(deps)
+      setUsers(usrs)
     } catch { /* */ }
   }
   useEffect(() => { loadData() }, [refreshKey])
@@ -75,8 +74,7 @@ export default function AdminPanel({ activeDept, perms, currentUsername, refresh
         const body: any = { username: form.username, password: form.password, displayName: form.displayName || form.username, email: form.email }
         if (isAdmin) { body.role = form.role; if (form.departmentId) body.departmentId = parseInt(form.departmentId) }
         if (!body.departmentId && activeDept) body.departmentId = parseInt(activeDept)
-        const r = await fetch('/api/admin/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-        if (!r.ok) { const e = await r.json(); throw new Error(e.error || '创建失败') }
+        await adminApi.createUser(body)
         setModal(null); loadData(); showToast('创建成功', 'success')
       } catch (e: any) { showToast(e.message) }
     } else if (modal?.mode === 'edit' && modal.user) {
@@ -84,12 +82,10 @@ export default function AdminPanel({ activeDept, perms, currentUsername, refresh
         if (canManage && form.role !== modal.user.role) {
           const body: any = { role: form.role }
           if (isAdmin && form.departmentId) body.departmentId = parseInt(form.departmentId)
-          const r = await fetch(`/api/admin/users/${modal.user.id}/role`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-          if (!r.ok) { const e = await r.json(); throw new Error(e.error || '操作失败') }
+          await adminApi.setUserRole(modal.user.id, form.role)
         }
         if (form.displayName !== (modal.user.displayName || '') || form.email !== (modal.user.email || '')) {
-          const r = await fetch(`/api/admin/users/${modal.user.id}/profile`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ displayName: form.displayName, email: form.email }) })
-          if (!r.ok) { const e = await r.json(); throw new Error(e.error || '保存失败') }
+          await adminApi.editUserProfile(modal.user.id, { displayName: form.displayName, email: form.email })
         }
         setModal(null); loadData(); showToast('保存成功', 'success')
       } catch (e: any) { showToast(e.message) }
@@ -99,8 +95,7 @@ export default function AdminPanel({ activeDept, perms, currentUsername, refresh
   const doDeleteUser = async () => {
     if (!confirmDel) return
     try {
-      const r = await fetch(`/api/admin/users/${confirmDel.id}`, { method: 'DELETE' })
-      if (!r.ok) { const e = await r.json(); showToast(e.error || '删除失败'); setConfirmDel(null); return }
+      await adminApi.deleteUser(confirmDel.id)
       setConfirmDel(null); loadData(); showToast('已删除', 'success')
     } catch (e: any) { showToast(e.message); setConfirmDel(null) }
   }

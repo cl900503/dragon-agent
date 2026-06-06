@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import type { ConversationSummary } from '../api'
 import type { Permissions } from '../hooks/useAuth'
+import * as adminApi from '../api/admin'
 import ChevronIcon from './ChevronIcon'
 import KbList from './KbList'
 import { showToast } from './Toast'
@@ -36,15 +37,14 @@ function AdminDeptList({ activeId, onSelect, onRefresh, canManage }: { activeId:
   const [confirmDel, setConfirmDel] = useState<{ id: number; name: string; userCount: number } | null>(null)
 
   const load = () => {
-    fetch('/api/admin/departments').then(r => r.json()).then(d => { setDepts(d); onRefresh() }).catch(() => {})
+    adminApi.listDepartments().then(d => { setDepts(d); onRefresh() }).catch(() => {})
   }
   useEffect(() => { load() }, [])
 
   const handleDelete = async () => {
     if (!confirmDel) return
     try {
-      const r = await fetch(`/api/admin/departments/${confirmDel.id}`, { method: 'DELETE' })
-      if (!r.ok) { const e = await r.json(); showToast(e.error || '删除失败'); setConfirmDel(null); return }
+      await adminApi.deleteDepartment(confirmDel.id)
       setConfirmDel(null); load()
     } catch { setConfirmDel(null) }
   }
@@ -53,8 +53,7 @@ function AdminDeptList({ activeId, onSelect, onRefresh, canManage }: { activeId:
   const saveEdit = async (id: number) => {
     if (!editName.trim()) return
     try {
-      const r = await fetch(`/api/admin/departments/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: editName.trim() }) })
-      if (!r.ok) { const e = await r.json(); showToast(e.error || '重命名失败'); return }
+      await adminApi.renameDepartment(id, editName.trim())
       setEditingId(null); load()
     } catch { /* */ }
   }
@@ -138,8 +137,7 @@ export default function Sidebar({
 
   const createDept = async () => {
     if (!newDeptName.trim()) return
-    const r = await fetch('/api/admin/departments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newDeptName.trim() }) })
-    if (!r.ok) { const e = await r.json(); showToast(e.error || '创建失败'); return }
+    await adminApi.createDepartment(newDeptName.trim())
     setNewDeptName(''); setShowNewDept(false)
     setDeptKey(k => k + 1)
     onDeptChange?.()
