@@ -9,9 +9,13 @@ import org.springframework.data.repository.query.Param;
 
 import com.dragon.agent.entity.RagFeedback;
 
+/**
+ * RAG 检索反馈 JPA 仓库。
+ *
+ * @author 陈龙
+ * @since 2026-06-01
+ */
 public interface RagFeedbackRepository extends JpaRepository<RagFeedback, Long> {
-
-    List<RagFeedback> findByMessageId(String messageId);
 
     Optional<RagFeedback> findByMessageIdAndUserId(String messageId, Long userId);
 

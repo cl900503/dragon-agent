@@ -1,4 +1,4 @@
-package com.dragon.agent.service;
+package com.dragon.agent.service.rag;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -39,10 +39,15 @@ public class HybridSearchService {
     private String collection;
     @Value("${spring.ai.vectorstore.milvus.embedding-dimension:1024}")
     private int dim;
+    @Value("${spring.ai.vectorstore.milvus.client.username:root}")
+    private String milvusUser;
+    @Value("${spring.ai.vectorstore.milvus.client.password:Milvus}")
+    private String milvusPassword;
 
     @PostConstruct
     void init() {
-        client = new MilvusClientV2(ConnectConfig.builder().uri("http://" + host + ":" + port).token("root:Milvus").build());
+        String token = milvusUser + ":" + milvusPassword;
+        client = new MilvusClientV2(ConnectConfig.builder().uri("http://" + host + ":" + port).token(token).build());
         ensureCollection();
     }
 

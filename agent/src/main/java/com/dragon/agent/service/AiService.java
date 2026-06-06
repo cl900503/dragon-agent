@@ -14,7 +14,7 @@ import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
 
 import com.dragon.agent.repository.UserRepository;
-import com.dragon.agent.service.DocumentService.RagResult;
+import com.dragon.agent.service.DocumentService.RagSearchResult;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -62,7 +62,7 @@ public class AiService {
             String userMsgId, String aiMsgId, String username) {
         conversationService.saveUserMessage(userMsgId, conversationId, message);
 
-        RagResult rag = retrieveKnowledgeBase(message, enableRag, username);
+        RagSearchResult rag = retrieveKnowledgeBase(message, enableRag, username);
         if (!rag.isEmpty()) {
             conversationService.saveRetrievalTraces(userMsgId, conversationId, rag.traces());
         }
@@ -108,9 +108,9 @@ public class AiService {
     }
 
     /** 从知识库检索上下文，按 userId 过滤保证数据隔离 */
-    private RagResult retrieveKnowledgeBase(String message, boolean enableRag, String username) {
+    private RagSearchResult retrieveKnowledgeBase(String message, boolean enableRag, String username) {
         if (!enableRag || documentService == null) {
-            return RagResult.EMPTY;
+            return RagSearchResult.EMPTY;
         }
         Long userId = userRepository.findByUsername(username).map(u -> u.getId()).orElse(null);
         return documentService.retrieveContext(message, userId);
@@ -129,7 +129,7 @@ public class AiService {
     }
 
     /** 编码 SSE done 事件——检索到的文档名和片段 */
-    private String buildDoneData(RagResult rag) {
+    private String buildDoneData(RagSearchResult rag) {
         if (rag.isEmpty())
             return "";
         return rag.traces().stream()

@@ -1,8 +1,6 @@
 package com.dragon.agent.controller;
 
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
-import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,16 +12,15 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.dragon.agent.entity.RagFeedback;
-import com.dragon.agent.repository.RagFeedbackRepository;
-import com.dragon.agent.repository.RagSearchLogRepository;
-import com.dragon.agent.repository.UserRepository;
+import com.dragon.agent.service.RagFeedbackService;
 import com.dragon.agent.support.SecurityHelper;
 
 import reactor.core.publisher.Mono;
 
 /**
- * RAG 检索质量接口——反馈与统计。
+ * RAG 检索质量接口——反馈提交和按用户隔离的统计数据。
+ *
+ * <p>Controller 仅负责路由转发，业务逻辑委托给 {@link RagFeedbackService}。</p>
  *
  * @author 陈龙
  * @since 2026-06-04
@@ -33,112 +30,70 @@ import reactor.core.publisher.Mono;
 public class RagController {
 
     @Autowired
-    private RagFeedbackRepository feedbackRepository;
-
-    @Autowired
-    private RagSearchLogRepository searchLogRepository;
-
-    @Autowired
-    private UserRepository userRepository;
+    private RagFeedbackService ragFeedbackService;
 
     @Autowired
     private SecurityHelper securityHelper;
 
-    /** 提交检索反馈 */
+    /**
+     * 提交检索质量反馈。
+     */
     @PostMapping("/feedback")
     public Mono<ResponseEntity<Map<String, Object>>> submitFeedback(@RequestBody Map<String, String> body) {
         return securityHelper.currentUsername().map(username -> {
-            var user = userRepository.findByUsername(username).orElse(null);
-            if (user == null) return ResponseEntity.status(401).body(Map.of("error", "未登录"));
-
-            String messageId = body.get("messageId");
-            String ratingStr = body.get("rating");
-            String comment = body.get("comment");
-
-            if (messageId == null || ratingStr == null) {
-                return ResponseEntity.badRequest().body(Map.of("error", "messageId 和 rating 不能为空"));
+            try {
+                ragFeedbackService.submitFeedback(username,
+                        body.get("messageId"), body.get("rating"), body.get("comment"));
+                return ResponseEntity.status(201).body(Map.of("status", "ok"));
+            } catch (IllegalStateException e) {
+                return ResponseEntity.status(409).body(Map.of("error", e.getMessage()));
+            } catch (IllegalArgumentException e) {
+                return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            } catch (Exception e) {
+                return ResponseEntity.status(401).body(Map.of("error", "未登录"));
             }
-            if (feedbackRepository.existsByMessageIdAndUserId(messageId, user.getId())) {
-                return ResponseEntity.status(409).body(Map.of("error", "已反馈过"));
-            }
-
-            RagFeedback.Rating rating = RagFeedback.Rating.valueOf(ratingStr);
-            feedbackRepository.save(new RagFeedback(messageId, user.getId(), rating, comment));
-            return ResponseEntity.status(201).body(Map.of("status", "ok"));
         });
     }
 
-    /** 检索质量统计（最近 30 天） */
+    /**
+     * 检索质量统计（最近 30 天，仅当前用户）。
+     */
     @GetMapping("/stats")
     public Mono<ResponseEntity<Map<String, Object>>> stats() {
         return securityHelper.currentUsername().map(username -> {
-            Instant now = Instant.now();
-            Instant thirtyDaysAgo = now.minus(30, ChronoUnit.DAYS);
-
-            var feedbackStats = feedbackRepository.countByRatingBetween(thirtyDaysAgo, now);
-            long total = 0, useful = 0;
-            for (Object[] row : feedbackStats) {
-                long count = (Long) row[1];
-                total += count;
-                if (RagFeedback.Rating.USEFUL.equals(row[0])) useful += count;
+            try {
+                return ResponseEntity.ok(ragFeedbackService.getStats(username));
+            } catch (Exception e) {
+                return ResponseEntity.status(401).body(Map.of("error", "未登录"));
             }
-
-            var searchStats = searchLogRepository.statsBetween(thirtyDaysAgo, now);
-            Map<String, Object> result = new LinkedHashMap<>();
-            if (!searchStats.isEmpty() && searchStats.get(0)[0] != null) {
-                Object[] row = searchStats.get(0);
-                result.put("totalSearches", row[0]);
-                result.put("avgTopScore", row[1]);
-                result.put("avgScore", row[2]);
-                result.put("avgDurationMs", row[3]);
-                result.put("missCount", row[4]);
-            } else {
-                result.put("totalSearches", 0);
-            }
-            result.put("feedbackTotal", total);
-            result.put("feedbackUseful", useful);
-            result.put("feedbackRate", total > 0 ? String.format("%.1f%%", 100.0 * useful / total) : "N/A");
-
-            return ResponseEntity.ok(result);
         });
     }
 
-    /** 批量查询反馈状态（用于页面加载时恢复反馈展示） */
+    /**
+     * 批量查询反馈状态（用于页面加载时恢复已有反馈的选中状态）。
+     */
     @GetMapping("/feedback/batch")
     public Mono<ResponseEntity<Map<String, String>>> batchFeedback(@RequestParam(name = "ids") String ids) {
         return securityHelper.currentUsername().map(username -> {
-            var user = userRepository.findByUsername(username).orElse(null);
-            if (user == null) return ResponseEntity.status(401).body(Map.of());
-            String[] idArray = ids.split(",");
-            Map<String, String> result = new LinkedHashMap<>();
-            for (String msgId : idArray) {
-                String trimmed = msgId.trim();
-                if (trimmed.isEmpty()) continue;
-                var existing = feedbackRepository.findByMessageIdAndUserId(trimmed, user.getId());
-                result.put(trimmed, existing.map(f -> f.getRating().name()).orElse(null));
+            try {
+                return ResponseEntity.ok(ragFeedbackService.batchFeedback(username, ids));
+            } catch (Exception e) {
+                return ResponseEntity.status(401).body(Map.of());
             }
-            return ResponseEntity.ok(result);
         });
     }
 
-    /** 最近检索记录 */
+    /**
+     * 最近检索记录（仅当前用户）。
+     */
     @GetMapping("/recent")
-    public Mono<ResponseEntity<java.util.List<Map<String, Object>>>> recent() {
+    public Mono<ResponseEntity<List<Map<String, Object>>>> recent() {
         return securityHelper.currentUsername().map(username -> {
-            var logs = searchLogRepository.findTop20ByOrderByCreatedAtDesc();
-            var list = new java.util.ArrayList<Map<String, Object>>();
-            for (var log : logs) {
-                Map<String, Object> item = new LinkedHashMap<>();
-                item.put("id", log.getId());
-                item.put("query", log.getQuery());
-                item.put("hit", log.isHit());
-                item.put("resultCount", log.getResultCount());
-                item.put("topScore", log.getTopScore());
-                item.put("durationMs", log.getDurationMs());
-                item.put("createdAt", log.getCreatedAt().toString());
-                list.add(item);
+            try {
+                return ResponseEntity.ok(ragFeedbackService.getRecent(username));
+            } catch (Exception e) {
+                return ResponseEntity.status(401).body(List.of());
             }
-            return ResponseEntity.ok(list);
         });
     }
 }

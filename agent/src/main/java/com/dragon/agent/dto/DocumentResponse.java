@@ -16,13 +16,6 @@ public record DocumentResponse(String id, String originalName, Long fileSize, St
         DocumentStatus status, Integer chunkCount, String errorMessage, Instant createdAt,
         boolean canDelete) {
 
-    public static DocumentResponse from(DocumentEntity entity) {
-        return new DocumentResponse(entity.getId(), entity.getOriginalName(), entity.getFileSize(),
-                entity.getMimeType(), entity.getKbId(), null, null, entity.getUserId(),
-                entity.getStatus(), entity.getChunkCount(),
-                entity.getErrorMessage(), entity.getCreatedAt(), false);
-    }
-
     public static DocumentResponse enriched(DocumentEntity entity, String kbName, String uploaderName, boolean canDelete) {
         return new DocumentResponse(entity.getId(), entity.getOriginalName(), entity.getFileSize(),
                 entity.getMimeType(), entity.getKbId(), kbName, uploaderName, entity.getUserId(),

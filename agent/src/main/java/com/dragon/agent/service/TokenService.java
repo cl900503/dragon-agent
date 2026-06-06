@@ -34,6 +34,21 @@ public class TokenService {
     }
 
     /**
+     * 验证密钥安全强度，非 dev 环境下密钥不能为空且长度至少 32 字符。
+     */
+    public void validateSecret(boolean isDevProfile) {
+        if (secret == null || secret.isBlank()) {
+            if (isDevProfile) {
+                throw new IllegalStateException("生产环境必须设置 AUTH_TOKEN_SECRET 环境变量，长度至少 32 字符");
+            }
+            throw new IllegalStateException("AUTH_TOKEN_SECRET 未配置，请设置环境变量或 application.yaml 中的 app.auth.token-secret");
+        }
+        if (secret.length() < 16) {
+            throw new IllegalStateException("AUTH_TOKEN_SECRET 太短（" + secret.length() + " 字符），至少需要 16 字符");
+        }
+    }
+
+    /**
      * 生成签名 Token。
      *
      * @param username

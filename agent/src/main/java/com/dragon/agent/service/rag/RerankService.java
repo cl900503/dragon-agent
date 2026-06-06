@@ -1,4 +1,4 @@
-package com.dragon.agent.service;
+package com.dragon.agent.service.rag;
 
 import java.util.*;
 import java.util.stream.Collectors;

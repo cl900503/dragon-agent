@@ -25,6 +25,11 @@ import com.dragon.agent.entity.UserEntity;
 import com.dragon.agent.repository.DocumentRepository;
 import com.dragon.agent.repository.UserRepository;
 import com.dragon.agent.service.parser.DocumentParserService;
+import com.dragon.agent.service.rag.BgeM3Client;
+import com.dragon.agent.service.rag.ChunkingService;
+import com.dragon.agent.service.rag.HybridSearchService;
+import com.dragon.agent.service.rag.RagSearchService;
+import com.dragon.agent.service.rag.RerankService;
 import com.dragon.agent.service.storage.FileStorageService;
 
 /**
@@ -80,6 +85,9 @@ public class DocumentService {
 
     @Autowired
     private RerankService rerankService;
+
+    @Autowired
+    private RagSearchService ragSearchService;
 
     @Value("${app.rag.chunk-size:512}")
     private int defaultChunkSize;
@@ -331,57 +339,11 @@ public class DocumentService {
     // ==================== RAG 检索 ====================
 
     /**
-     * RAG 语义检索——按 KB 成员关系过滤。
-     * 用户可检索：自己的所有文档 + 有权限的 KB 中的文档。
+     * RAG 语义检索——委托给 {@link com.dragon.agent.service.rag.RagSearchService}。
      */
-    public RagResult retrieveContext(String query, Long userId) {
-        if (vectorStore == null || userId == null) return RagResult.EMPTY;
-
-        try {
-            List<String> accessibleKbIds = knowledgeBaseService.getAccessibleKbIds(userId);
-            StringBuilder filter = new StringBuilder("userId == '" + userId + "'");
-            if (!accessibleKbIds.isEmpty()) {
-                filter.append(" || kbId in [");
-                filter.append(accessibleKbIds.stream()
-                        .map(id -> "'" + id + "'")
-                        .collect(Collectors.joining(", ")));
-                filter.append("]");
-            }
-
-            // Hybrid Search: Dense + Sparse
-            long start = System.currentTimeMillis();
-            var emb = bgeM3.embed(query);
-            if (emb == null || !emb.containsKey("dense")) return RagResult.EMPTY;
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> raw = hybridSearch.hybridSearch(
-                    (List<Double>) emb.get("dense"), filter.toString(), 20);
-            long retrievalMs = System.currentTimeMillis() - start;
-
-            if (raw.isEmpty()) return RagResult.EMPTY;
-            List<Document> candidates = raw.stream().map(r -> {
-                Document d = new Document((String) r.getOrDefault("content", ""), new LinkedHashMap<>(r));
-                Object s = r.get("score"); if (s instanceof Number) d.getMetadata().put("score", ((Number) s).doubleValue());
-                return d;
-            }).collect(Collectors.toList());
-
-            // Reranker 重排 top-5，将 Reranker 分数写入 metadata
-            var rerankResult = rerankService.rerank(query, candidates);
-            List<Document> results = rerankResult.documents();
-            for (int i = 0; i < Math.min(results.size(), rerankResult.scores().size()); i++) {
-                results.get(i).getMetadata().put("score", rerankResult.scores().get(i).score());
-            }
-
-            double ts = results.stream().mapToDouble(d -> d.getScore() != null ? d.getScore() : 0).max().orElse(0);
-            double as = results.stream().mapToDouble(d -> d.getScore() != null ? d.getScore() : 0).average().orElse(0);
-            try { searchLogRepository.save(new com.dragon.agent.entity.RagSearchLog(userId, query, String.join(",", accessibleKbIds), results.size(), ts, as, retrievalMs, true)); } catch (Exception ignored) {}
-
-            log.debug("RAG: {} dense → {} reranked ({}ms)", candidates.size(), results.size(), retrievalMs);
-            List<Map<String, Object>> traces = buildTraces(results);
-            return new RagResult(formatContext(results), traces);
-        } catch (Exception e) {
-            log.warn("RAG retrieval failed: {}", e.getMessage());
-            return RagResult.EMPTY;
-        }
+    public RagSearchResult retrieveContext(String query, Long userId) {
+        var result = ragSearchService.retrieveContext(query, userId);
+        return new RagSearchResult(result.context(), result.traces());
     }
 
     // ==================== 文件操作 ====================
@@ -401,44 +363,16 @@ public class DocumentService {
         DocumentEntity entity = documentRepository.findById(documentId)
                 .orElseThrow(() -> new IllegalArgumentException("文档不存在"));
 
-        // 本人上传
         if (entity.getUserId().equals(user.getId())) return entity;
-        // KB 中有访问权限
         if (entity.getKbId() != null && !entity.getKbId().isBlank()
                 && knowledgeBaseService.canAccessKb(entity.getKbId(), username)) return entity;
 
         throw new IllegalArgumentException("文档不存在或无权访问");
     }
 
-    // ==================== 内部方法 ====================
-
-    private List<Map<String, Object>> buildTraces(List<Document> documents) {
-        List<Map<String, Object>> traces = new ArrayList<>();
-        for (Document doc : documents) {
-            Map<String, Object> trace = new LinkedHashMap<>();
-            trace.put("documentName", doc.getMetadata().getOrDefault("originalName", "未知文档"));
-            trace.put("chunkIndex", Integer.parseInt((String) doc.getMetadata().getOrDefault("chunkIndex", "0")));
-            Object score = doc.getMetadata().get("score");
-            trace.put("score", score instanceof Number ? ((Number) score).doubleValue() : doc.getScore() != null ? doc.getScore() : 0.0);
-            String text = doc.getText();
-            trace.put("contentSnippet", text.length() > 200 ? text.substring(0, 200) + "..." : text);
-            traces.add(trace);
-        }
-        return traces;
-    }
-
-    private String formatContext(List<Document> documents) {
-        StringBuilder sb = new StringBuilder();
-        for (Document doc : documents) {
-            String name = (String) doc.getMetadata().getOrDefault("originalName", "未知");
-            sb.append("[%s]\n%s\n\n".formatted(name, doc.getText()));
-        }
-        return sb.toString();
-    }
-
-    /** RAG 检索结果封装 */
-    public record RagResult(String context, List<Map<String, Object>> traces) {
-        public static final RagResult EMPTY = new RagResult("", List.of());
+    /** RAG 检索结果封装——委托给 RagSearchService.RagResult。 */
+    public record RagSearchResult(String context, List<Map<String, Object>> traces) {
+        public static final RagSearchResult EMPTY = new RagSearchResult("", List.of());
         public boolean isEmpty() { return context.isEmpty(); }
     }
 }

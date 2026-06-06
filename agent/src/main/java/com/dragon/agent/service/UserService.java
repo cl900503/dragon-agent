@@ -29,49 +29,60 @@ public class UserService {
     }
 
     /**
-     * 注册新用户，密码经 BCrypt 哈希后存入 MySQL。
+     * 注册新用户，密码经 BCrypt 哈希后存入数据库。
      *
-     * @param username
-     *            用户名
-     * @param rawPassword
-     *            明文密码
-     * @return 新创建的 UserDetails
-     * @throws UsernameAlreadyExistsException
-     *             用户名已存在
+     * @param username     用户名
+     * @param rawPassword  明文密码
+     * @param displayName  显示名称
+     * @param email        邮箱
+     * @param role         角色（ADMIN / DEPT_ADMIN / USER）
+     * @param departmentId 所属部门 ID
+     * @return 包含实际角色权限的 UserDetails
+     * @throws UsernameAlreadyExistsException 用户名已存在
      */
-    public UserDetails register(String username, String rawPassword) {
-        return register(username, rawPassword, null, null, null, null);
-    }
-
     public UserDetails register(String username, String rawPassword, String displayName, String email, String role,
             Long departmentId) {
         if (userRepository.existsByUsername(username)) {
             throw new UsernameAlreadyExistsException("用户名 '" + username + "' 已存在");
         }
+        String actualRole = role != null ? role : "USER";
         UserEntity entity = new UserEntity(username, encoder.encode(rawPassword));
         entity.setDisplayName(displayName);
         entity.setEmail(email);
-        entity.setRole(role != null ? role : "USER");
+        entity.setRole(actualRole);
         entity.setDepartmentId(departmentId);
         entity.setStatus("ACTIVE");
         userRepository.save(entity);
-        return User.builder().username(username).password(entity.getPasswordHash()).authorities("ROLE_USER").build();
+        return buildUserDetails(entity);
     }
 
     /**
-     * 按用户名查找。
+     * 按用户名查找，返回包含实际角色权限的 UserDetails。
      *
      * @return UserDetails，未找到返回 null
      */
     public UserDetails findByUsername(String username) {
-        return userRepository.findByUsername(username).map(entity -> User.builder().username(entity.getUsername())
-                .password(entity.getPasswordHash()).authorities("ROLE_USER").build()).orElse(null);
+        return userRepository.findByUsername(username)
+                .map(this::buildUserDetails)
+                .orElse(null);
     }
 
     /**
-     * 验证明文密码与哈希是否匹配。
+     * 验证明文密码与 BCrypt 哈希是否匹配。
      */
     public boolean passwordMatches(String rawPassword, String encodedPassword) {
         return encoder.matches(rawPassword, encodedPassword);
+    }
+
+    /**
+     * 根据用户实体构建 Spring Security UserDetails，使用数据库中的实际角色。
+     */
+    private UserDetails buildUserDetails(UserEntity entity) {
+        String role = entity.getRole() != null ? entity.getRole() : "USER";
+        return org.springframework.security.core.userdetails.User.builder()
+                .username(entity.getUsername())
+                .password(entity.getPasswordHash())
+                .authorities("ROLE_" + role)
+                .build();
     }
 }

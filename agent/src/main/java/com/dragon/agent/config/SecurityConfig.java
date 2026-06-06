@@ -13,11 +13,12 @@ import org.springframework.security.web.server.context.WebSessionServerSecurityC
 /**
  * WebFlux 安全配置。
  *
- * 使用 WebSession 存储 SecurityContext（cookie 形式）， 与 Vite 代理同源，cookie
- * 自动携带，无需前端额外处理。
+ * <p>使用 WebSession 存储 SecurityContext（cookie 形式），与 Vite 代理同源，
+ * cookie 自动携带。CSRF 关闭——SPA + JSON API + session cookie 模式，
+ * formLogin / httpBasic 关闭——使用自定义 AuthController 处理登录逻辑。</p>
  *
- * CSRF 关闭——SPA + JSON API + session cookie，无 CSRF 风险。 formLogin / httpBasic
- * 关闭——使用自定义 AuthController 处理登录逻辑。
+ * <p>角色权限控制由各 Controller 和 Service 在代码层面实现，
+ * 不依赖方法级注解（Spring Boot 4.x / Security 7.x 尚未提供稳定支持）。</p>
  *
  * @author 陈龙
  * @since 2026-06-01
