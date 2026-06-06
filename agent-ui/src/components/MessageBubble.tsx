@@ -84,13 +84,19 @@ export default function MessageBubble({ message }: Props) {
           && message.retrievalTraces.length > 0
           && (() => {
             const traces = message.retrievalTraces!
-            // 按文档名去重并分组
+            // 按文档名去重并分组，组内按相似度降序排列
             const byDoc = new Map<string, typeof traces>()
             traces.forEach(t => {
               if (!byDoc.has(t.documentName)) byDoc.set(t.documentName, [])
               byDoc.get(t.documentName)!.push(t)
             })
-            const docNames = [...byDoc.keys()]
+            // 组内排序 + 文档间按最高分排序
+            for (const chunks of byDoc.values()) chunks.sort((a, b) => (b.score || 0) - (a.score || 0))
+            const docNames = [...byDoc.keys()].sort((a, b) => {
+              const maxA = Math.max(...byDoc.get(a)!.map(c => c.score || 0))
+              const maxB = Math.max(...byDoc.get(b)!.map(c => c.score || 0))
+              return maxB - maxA
+            })
             if (docNames.length === 0) return null
             return (
               <div className="citation-section">

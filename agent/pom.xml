@@ -77,6 +77,13 @@
             <artifactId>spring-ai-starter-vector-store-milvus</artifactId>
         </dependency>
 
+        <!-- Milvus Java SDK 3.0.1 — Hybrid Search (Dense + Sparse + RRF) -->
+        <dependency>
+            <groupId>io.milvus</groupId>
+            <artifactId>milvus-sdk-java</artifactId>
+            <version>3.0.1</version>
+        </dependency>
+
         <!-- Apache Tika: 通用文档解析（PDF, Word, Excel, PPT 等 1000+ 格式） -->
         <dependency>
             <groupId>org.apache.tika</groupId>

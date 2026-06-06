@@ -42,11 +42,11 @@ spring:
           database: ${MILVUS_DATABASE:default}
         embedding-dimension: 1024
         collection-name: ${MILVUS_COLLECTION:vector_store}
-        initialize-schema: true
-    # OpenAI Embedding 客户端（指向 TEI BGE-M3，OpenAI 兼容 API）
+        initialize-schema: false
+    # OpenAI Embedding 客户端（硅基流动 BGE-M3 API）
     openai:
-      api-key: dummy
-      base-url: http://localhost:8081
+      api-key: ${BGE_API_KEY}
+      base-url: https://api.siliconflow.cn/v1
       embedding:
         options:
           model: BAAI/bge-m3
@@ -85,6 +85,8 @@ app:
       - text/csv
       - application/json
   # RAG 检索参数
+  bge-m3:
+    url: http://localhost:8081/embed
   rag:
     chunk-size: 512
     chunk-overlap: 50  # TokenTextSplitter 暂不支持，预留后续版本启用

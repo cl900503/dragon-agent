@@ -58,6 +58,12 @@ public class DocumentService {
     private VectorStore vectorStore;
 
     @Autowired
+    private HybridSearchService hybridSearch;
+
+    @Autowired
+    private BgeM3Client bgeM3;
+
+    @Autowired
     private DocumentRepository documentRepository;
 
     @Autowired
@@ -71,6 +77,9 @@ public class DocumentService {
 
     @Autowired
     private com.dragon.agent.repository.RagSearchLogRepository searchLogRepository;
+
+    @Autowired
+    private RerankService rerankService;
 
     @Value("${app.rag.chunk-size:512}")
     private int defaultChunkSize;
@@ -134,11 +143,22 @@ public class DocumentService {
                     chunk.getMetadata().put("kbId", kbId);
             }
 
-            if (vectorStore != null) {
-                try { vectorStore.add(chunks); } catch (Exception e) {
-                    log.warn("Vector indexing failed for [{}]: {}", originalName, e.getMessage());
+            // 写入 Milvus Hybrid (Dense + Sparse)
+            try {
+                List<Map<String, Object>> rows = new ArrayList<>();
+                for (int i = 0; i < chunks.size(); i++) {
+                    var emb = bgeM3.embed(chunks.get(i).getText());
+                    if (emb == null) throw new RuntimeException("Embedding failed");
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    row.put("dense_vector", emb.get("dense"));
+                    row.put("sparse_vector", emb.get("sparse")); row.put("content", chunks.get(i).getText());
+                    row.put("documentId", docId); row.put("originalName", originalName);
+                    row.put("chunkIndex", String.valueOf(i)); row.put("userId", user.getId().toString());
+                    if (kbId != null && !kbId.isBlank()) row.put("kbId", kbId);
+                    rows.add(row);
                 }
-            }
+                hybridSearch.insert(rows);
+            } catch (Exception e) { log.warn("Hybrid insert failed: {}", e.getMessage()); }
 
             entity.setChunkCount(chunks.size());
             entity.setStatus(DocumentStatus.READY);
@@ -257,7 +277,7 @@ public class DocumentService {
             log.warn("MinIO delete failed: {}", entity.getStoredPath());
         }
         if (vectorStore != null) {
-            try { vectorStore.delete("documentId == '" + entity.getId() + "'"); } catch (Exception e) {
+            try { hybridSearch.deleteByExpr("documentId == '" + entity.getId() + "'"); } catch (Exception e) {
                 log.warn("Vector delete failed: {}", entity.getId());
             }
         }
@@ -292,7 +312,7 @@ public class DocumentService {
                 if (entity.getKbId() != null) chunks.get(i).getMetadata().put("kbId", entity.getKbId());
             }
             if (vectorStore != null) {
-                try { vectorStore.delete("documentId == '" + documentId + "'"); } catch (Exception e) {
+                try { hybridSearch.deleteByExpr("documentId == '" + documentId + "'"); } catch (Exception e) {
                     log.warn("Retry cleanup old vectors failed: {}", e.getMessage());
                 }
                 try { vectorStore.add(chunks); } catch (Exception e) { log.warn("Retry index failed"); }
@@ -328,27 +348,34 @@ public class DocumentService {
                 filter.append("]");
             }
 
+            // Hybrid Search: Dense + Sparse
             long start = System.currentTimeMillis();
-            SearchRequest request = SearchRequest.builder()
-                    .query(query).topK(topK)
-                    .similarityThreshold(similarityThreshold)
-                    .filterExpression(filter.toString())
-                    .build();
-            List<Document> results = vectorStore.similaritySearch(request);
-            long durationMs = System.currentTimeMillis() - start;
+            var emb = bgeM3.embed(query);
+            if (emb == null || !emb.containsKey("dense")) return RagResult.EMPTY;
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> raw = hybridSearch.hybridSearch(
+                    (List<Double>) emb.get("dense"), filter.toString(), 20);
+            long retrievalMs = System.currentTimeMillis() - start;
 
-            // 记录检索日志
-            double topScore = results.stream().mapToDouble(d -> d.getScore() != null ? d.getScore() : 0).max().orElse(0);
-            double avgScore = results.stream().mapToDouble(d -> d.getScore() != null ? d.getScore() : 0).average().orElse(0);
-            try {
-                searchLogRepository.save(new com.dragon.agent.entity.RagSearchLog(
-                        userId, query, String.join(",", accessibleKbIds),
-                        results.size(), topScore, avgScore, durationMs, !results.isEmpty()));
-            } catch (Exception ignored) { /* 日志写入失败不影响主流程 */ }
+            if (raw.isEmpty()) return RagResult.EMPTY;
+            List<Document> candidates = raw.stream().map(r -> {
+                Document d = new Document((String) r.getOrDefault("content", ""), new LinkedHashMap<>(r));
+                Object s = r.get("score"); if (s instanceof Number) d.getMetadata().put("score", ((Number) s).doubleValue());
+                return d;
+            }).collect(Collectors.toList());
 
-            if (results.isEmpty()) return RagResult.EMPTY;
+            // Reranker 重排 top-5，将 Reranker 分数写入 metadata
+            var rerankResult = rerankService.rerank(query, candidates);
+            List<Document> results = rerankResult.documents();
+            for (int i = 0; i < Math.min(results.size(), rerankResult.scores().size()); i++) {
+                results.get(i).getMetadata().put("score", rerankResult.scores().get(i).score());
+            }
 
-            log.debug("RAG retrieved {} chunks in {}ms", results.size(), durationMs);
+            double ts = results.stream().mapToDouble(d -> d.getScore() != null ? d.getScore() : 0).max().orElse(0);
+            double as = results.stream().mapToDouble(d -> d.getScore() != null ? d.getScore() : 0).average().orElse(0);
+            try { searchLogRepository.save(new com.dragon.agent.entity.RagSearchLog(userId, query, String.join(",", accessibleKbIds), results.size(), ts, as, retrievalMs, true)); } catch (Exception ignored) {}
+
+            log.debug("RAG: {} dense → {} reranked ({}ms)", candidates.size(), results.size(), retrievalMs);
             List<Map<String, Object>> traces = buildTraces(results);
             return new RagResult(formatContext(results), traces);
         } catch (Exception e) {
@@ -391,7 +418,8 @@ public class DocumentService {
             Map<String, Object> trace = new LinkedHashMap<>();
             trace.put("documentName", doc.getMetadata().getOrDefault("originalName", "未知文档"));
             trace.put("chunkIndex", Integer.parseInt((String) doc.getMetadata().getOrDefault("chunkIndex", "0")));
-            trace.put("score", doc.getScore() != null ? doc.getScore() : 0.0);
+            Object score = doc.getMetadata().get("score");
+            trace.put("score", score instanceof Number ? ((Number) score).doubleValue() : doc.getScore() != null ? doc.getScore() : 0.0);
             String text = doc.getText();
             trace.put("contentSnippet", text.length() > 200 ? text.substring(0, 200) + "..." : text);
             traces.add(trace);
