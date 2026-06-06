@@ -144,11 +144,7 @@ public class RagSearchService {
             trace.put("score", score instanceof Number
                     ? ((Number) score).doubleValue()
                     : doc.getScore() != null ? doc.getScore() : 0.0);
-            String text = doc.getText();
-            trace.put("contentSnippet",
-                    text != null && text.length() > 500
-                            ? text.substring(0, 500) + "..."
-                            : text);
+            trace.put("contentSnippet", doc.getText());
             traces.add(trace);
         }
         return traces;
