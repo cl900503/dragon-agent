@@ -43,6 +43,9 @@ public class AiService {
     @Autowired(required = false)
     private DocumentService documentService;
 
+    @Autowired(required = false)
+    private com.dragon.agent.service.rag.QueryProcessor queryProcessor;
+
     @Autowired
     private ConversationService conversationService;
 
@@ -107,28 +110,42 @@ public class AiService {
         });
     }
 
-    /** 从知识库检索上下文，按 userId 过滤保证数据隔离 */
+    /** 从知识库检索上下文，优先使用 QueryProcessor 进行查询改写和多路检索融合 */
     private RagSearchResult retrieveKnowledgeBase(String message, boolean enableRag, String username) {
         if (!enableRag || documentService == null) {
             return RagSearchResult.EMPTY;
         }
         Long userId = userRepository.findByUsername(username).map(u -> u.getId()).orElse(null);
+        if (userId == null) {
+            return RagSearchResult.EMPTY;
+        }
+
+        // 优先使用 QueryProcessor（查询改写 + 多路检索融合），不可用时降级为直接检索
+        if (queryProcessor != null) {
+            var result = queryProcessor.process(message, userId);
+            return new RagSearchResult(result.context(), result.traces());
+        }
+
         return documentService.retrieveContext(message, userId);
     }
 
     /** 构建 RAG 系统提示词 */
     private String buildSystemPrompt(String context) {
         return """
-                以下是用户本地知识库中的文档内容。
-                如果文档中有相关信息，请基于文档内容回答，并在文中提及文档名。
-                如果文档信息不足，可以结合你的知识补充回答。
+                你是企业知识库助手。请严格遵循以下规则回答问题：
 
-                ## 本地知识库文档
+                ## 回答规则
+                1. **优先使用文档**：基于下方「知识库文档」中的内容回答用户问题。
+                2. **引用格式**：引用文档时使用 `[N]` 标注来源编号，例如 `[1] 指出...` 或 `根据 [3] ...`。
+                3. **知之为知之**：如果文档内容不足以回答问题，请明确说明"知识库中未找到相关信息"，不要编造内容。
+                4. **综合回答**：当多个文档片段相互补充时，综合各片段的信息给出完整答案。
+
+                ## 知识库文档
                 %s
                 """.formatted(context);
     }
 
-    /** 编码 SSE done 事件——检索到的文档名和片段 */
+    /** 编码 SSE done 事件——检索到的文档名、片段和分数 */
     private String buildDoneData(RagSearchResult rag) {
         if (rag.isEmpty())
             return "";

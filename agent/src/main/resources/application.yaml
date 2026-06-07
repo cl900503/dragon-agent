@@ -89,10 +89,29 @@ app:
     url: http://localhost:8081/embed
   rag:
     chunk-size: 512
-    chunk-overlap: 50  # TokenTextSplitter 暂不支持，预留后续版本启用
+    chunk-overlap: 50
     top-k: 5
     # BGE-M3 语义 Embedding，分数范围 0.3-0.8
     similarity-threshold: 0.2
+    # 语义分块开关
+    semantic-chunking: true
+    # 检索候选数
+    search-limit: 20
+  # Reranker 参数
+  rerank:
+    base-url: http://localhost:8082
+    top-k: 5
+    # MMR 多样性重排
+    mmr-enabled: true
+    mmr-lambda: 0.7
+  # 检索缓存
+  cache:
+    embedding:
+      max-size: 1000
+      ttl-minutes: 30
+    search:
+      max-size: 500
+      ttl-minutes: 5
 
 # Actuator 健康检查——仅暴露 health 端点
 management:

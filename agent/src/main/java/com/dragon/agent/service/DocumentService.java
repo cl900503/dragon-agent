@@ -89,6 +89,12 @@ public class DocumentService {
     @Autowired
     private RagSearchService ragSearchService;
 
+    @Autowired(required = false)
+    private com.dragon.agent.service.rag.SemanticChunker semanticChunker;
+
+    @Autowired(required = false)
+    private com.dragon.agent.service.rag.QueryCacheService cacheService;
+
     @Value("${app.rag.chunk-size:512}")
     private int defaultChunkSize;
 
@@ -136,7 +142,21 @@ public class DocumentService {
             entity.setStatus(DocumentStatus.INDEXING);
             documentRepository.save(entity);
 
-            List<Document> chunks = chunkingService.chunk(List.of(parsedDoc), defaultChunkSize, defaultChunkOverlap);
+            // 语义分块预处理：若有 SemanticChunker，先按文档结构切分为段落组，再做 token 级分块
+            List<Document> chunkSources;
+            if (semanticChunker != null) {
+                List<Document> semanticChunks = semanticChunker.chunk(parsedDoc.getText(), mimeType, originalName);
+                if (!semanticChunks.isEmpty()) {
+                    chunkSources = semanticChunks;
+                } else {
+                    chunkSources = List.of(parsedDoc);
+                }
+            } else {
+                chunkSources = List.of(parsedDoc);
+            }
+
+            // 滑动窗口分块：TokenTextSplitter + Chunk Overlap
+            List<Document> chunks = chunkingService.chunk(chunkSources, defaultChunkSize, defaultChunkOverlap);
             if (chunks.isEmpty()) throw new RuntimeException("文档内容为空");
 
             for (int i = 0; i < chunks.size(); i++) {
@@ -151,27 +171,32 @@ public class DocumentService {
                     chunk.getMetadata().put("kbId", kbId);
             }
 
-            // 写入 Milvus Hybrid (Dense + Sparse)
+            List<Map<String, Object>> rows = new ArrayList<>();
+            for (int i = 0; i < chunks.size(); i++) {
+                var emb = bgeM3.embed(chunks.get(i).getText());
+                if (emb == null) throw new RuntimeException("Embedding failed");
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("dense_vector", emb.get("dense"));
+                row.put("sparse_vector", emb.get("sparse"));
+                row.put("content", chunks.get(i).getText());
+                row.put("documentId", docId);
+                row.put("originalName", originalName);
+                row.put("chunkIndex", String.valueOf(i));
+                row.put("userId", user.getId().toString());
+                if (kbId != null && !kbId.isBlank()) row.put("kbId", kbId);
+                rows.add(row);
+            }
             try {
-                List<Map<String, Object>> rows = new ArrayList<>();
-                for (int i = 0; i < chunks.size(); i++) {
-                    var emb = bgeM3.embed(chunks.get(i).getText());
-                    if (emb == null) throw new RuntimeException("Embedding failed");
-                    Map<String, Object> row = new LinkedHashMap<>();
-                    row.put("dense_vector", emb.get("dense"));
-                    row.put("sparse_vector", emb.get("sparse")); row.put("content", chunks.get(i).getText());
-                    row.put("documentId", docId); row.put("originalName", originalName);
-                    row.put("chunkIndex", String.valueOf(i)); row.put("userId", user.getId().toString());
-                    if (kbId != null && !kbId.isBlank()) row.put("kbId", kbId);
-                    rows.add(row);
-                }
                 hybridSearch.insert(rows);
             } catch (Exception e) { log.warn("Hybrid insert failed: {}", e.getMessage()); }
+            int chunkCount = chunks.size();
 
-            entity.setChunkCount(chunks.size());
+            entity.setChunkCount(chunkCount);
             entity.setStatus(DocumentStatus.READY);
             documentRepository.save(entity);
-            log.info("Document [{}] indexed: {} chunks (kb={})", originalName, chunks.size(), kbId);
+            log.info("Document [{}] indexed: {} chunks (kb={})", originalName, chunkCount, kbId);
+            // 文档变更后使缓存失效，避免返回过时的检索结果
+            invalidateCacheIfNeeded();
             return enrichSingle(entity, username);
         } catch (Exception e) {
             log.error("Document processing failed [{}]: {}", originalName, e.getMessage());
@@ -290,6 +315,7 @@ public class DocumentService {
             }
         }
         documentRepository.delete(entity);
+        invalidateCacheIfNeeded();
     }
 
     // ==================== 重试 ====================
@@ -329,6 +355,7 @@ public class DocumentService {
             entity.setStatus(DocumentStatus.READY);
             entity.setErrorMessage(null);
             documentRepository.save(entity);
+            invalidateCacheIfNeeded();
         } catch (Exception e) {
             entity.setErrorMessage(e.getMessage());
             documentRepository.save(entity);
@@ -368,6 +395,13 @@ public class DocumentService {
                 && knowledgeBaseService.canAccessKb(entity.getKbId(), username)) return entity;
 
         throw new IllegalArgumentException("文档不存在或无权访问");
+    }
+
+    /** 文档变更后使检索缓存失效。缓存服务不可用（未注入）时静默跳过。 */
+    private void invalidateCacheIfNeeded() {
+        if (cacheService != null) {
+            cacheService.invalidateAll();
+        }
     }
 
     /** RAG 检索结果封装——委托给 RagSearchService.RagResult。 */
