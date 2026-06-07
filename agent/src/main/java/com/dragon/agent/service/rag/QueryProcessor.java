@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.document.Document;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
@@ -48,6 +49,9 @@ public class QueryProcessor {
 
     @Autowired(required = false)
     private ChatClient.Builder chatClientBuilder;
+
+    @Autowired(required = false)
+    private RewriteClient rewriteClient;
 
     @Autowired
     private RagSearchService ragSearchService;
@@ -147,56 +151,63 @@ public class QueryProcessor {
      * </ul>
      */
     List<String> rewrite(String query) {
-        if (chatClientBuilder == null) {
-            log.debug("ChatClient not available, skip query rewriting");
-            return List.of(query);
-        }
+        // 优先使用 RewriteClient（独立的轻量模型，不阻塞对话模型）
+        if (rewriteClient != null) {
+            try {
+                var future = java.util.concurrent.CompletableFuture.supplyAsync(
+                        () -> rewriteClient.rewrite(query));
+                String response = future.get(3, java.util.concurrent.TimeUnit.SECONDS);
 
-        try {
-            // LLM 调用设置 5 秒超时，避免阻塞主检索流程
-            var future = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
-                ChatClient client = chatClientBuilder.build();
-                return client.prompt()
-                        .user("""
-                                你是一个查询改写助手。将用户简短/口语化查询改写为更精确的检索查询。
-
-                                ## 规则
-                                1. 展开缩写简称  2. 补充上下文  3. 保持原意
-                                4. 如果已经清晰，原样返回
-
-                                ## 输出格式
-                                每行一个变体，最多 3 行，不要编号和解释：
-
-                                ## 用户查询
-                                %s
-
-                                ## 改写结果
-                                """.formatted(query))
-                        .call()
-                        .content();
-            });
-            String response = future.get(5, java.util.concurrent.TimeUnit.SECONDS);
-
-            if (response == null || response.isBlank()) {
-                return List.of(query);
-            }
-
-            // 解析：每行一个变体，去重并过滤空行
-            List<String> variants = new ArrayList<>();
-            variants.add(query); // 原始查询始终保留
-            for (String line : response.split("\n")) {
-                String trimmed = line.replaceAll("^[\\d\\.\\-\\s]+", "").trim();
-                if (!trimmed.isBlank() && !trimmed.equalsIgnoreCase(query) && variants.size() < 3) {
-                    variants.add(trimmed);
+                if (response != null && !response.isBlank()) {
+                    List<String> variants = new ArrayList<>();
+                    variants.add(query);
+                    for (String line : response.split("\n")) {
+                        String trimmed = line.replaceAll("^[\\d\\.\\-\\s]+", "").trim();
+                        if (!trimmed.isBlank() && !trimmed.equalsIgnoreCase(query) && variants.size() < 3) {
+                            variants.add(trimmed);
+                        }
+                    }
+                    log.debug("Query rewritten (V3): \"{}\" → {} variants in {}ms",
+                            truncate(query, 30), variants.size(), 0);
+                    return variants;
                 }
+            } catch (Exception e) {
+                log.warn("RewriteClient failed: {}", e.getMessage());
             }
-
-            log.debug("Query rewritten: \"{}\" → {} variants", truncate(query, 30), variants.size());
-            return variants;
-        } catch (Exception e) {
-            log.warn("Query rewriting failed: {}", e.getMessage());
             return List.of(query);
         }
+
+        // 降级：使用 ChatClient（共享对话的推理模型）
+        if (chatClientBuilder != null) {
+            try {
+                var future = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+                    ChatClient client = chatClientBuilder.build();
+                    return client.prompt()
+                            .user("改写用户查询为更精确的检索查询。每行一个变体，最多3行。\n\n用户查询：%s\n\n改写结果："
+                                    .formatted(query))
+                            .call()
+                            .content();
+                });
+                String response = future.get(5, java.util.concurrent.TimeUnit.SECONDS);
+
+                if (response != null && !response.isBlank()) {
+                    List<String> variants = new ArrayList<>();
+                    variants.add(query);
+                    for (String line : response.split("\n")) {
+                        String trimmed = line.replaceAll("^[\\d\\.\\-\\s]+", "").trim();
+                        if (!trimmed.isBlank() && !trimmed.equalsIgnoreCase(query) && variants.size() < 3) {
+                            variants.add(trimmed);
+                        }
+                    }
+                    log.debug("Query rewritten (fallback): \"{}\" → {} variants", truncate(query, 30), variants.size());
+                    return variants;
+                }
+            } catch (Exception e) {
+                log.warn("Query rewriting failed: {}", e.getMessage());
+            }
+        }
+
+        return List.of(query);
     }
 
     /**

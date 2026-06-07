@@ -34,6 +34,38 @@ interface DebugResult {
   finalCount: number
 }
 
+const KEY_LABELS: Record<string, string> = {
+  intent: '意图分类',
+  intentDesc: '分类说明',
+  rewritten: '已改写',
+  rewriteTimedOut: '改写超时',
+  llmCalled: '已调用LLM',
+  variants: '改写变体',
+  note: '备注',
+  filterExpr: '过滤表达式',
+  denseVectorDim: '向量维度',
+  sparseAvailable: '稀疏向量可用',
+  fusionMethod: '融合方式',
+  candidatesAfterFusion: '融合后候选数',
+  topKCandidates: 'TopK候选',
+  topScoreAfterFusion: '融合后最高分',
+  candidatesBeforeRerank: '重排前候选数',
+  crossEncoderModel: 'Cross-Encoder模型',
+  afterCrossEncoder: '重排后数量',
+  mmrEnabled: 'MMR去重',
+  mmrLambda: 'MMR多样性参数',
+  topRerankScore: '重排最高分',
+  threshold: '相似度阈值',
+  beforeFilter: '过滤前数量',
+  afterFilter: '过滤后数量',
+  removedCount: '过滤移除数',
+  fallback: '兜底策略',
+  lostInMiddle: 'Lost-in-Middle重排',
+  contentDedupApplied: '内容去重',
+  uniqueDocuments: '去重后文档数',
+  contextLength: '上下文字符数',
+}
+
 const STATUS_TAG: Record<string, { label: string; cls: string }> = {
   success:  { label: '成功', cls: 'rt-tag-ok' },
   filtered: { label: '成功', cls: 'rt-tag-ok' },
@@ -158,7 +190,7 @@ export default function RagTest() {
                     <div className="rt-step-detail">
                       {Object.entries(s.detail).map(([k, v]) => (
                         <div key={k} className="rt-detail-row">
-                          <span className="rt-detail-key">{k}</span>
+                          <span className="rt-detail-key">{KEY_LABELS[k] || k}</span>
                           <span className="rt-detail-val">
                             {Array.isArray(v)
                               ? v.join(', ')

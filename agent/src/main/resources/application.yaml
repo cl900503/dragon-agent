@@ -88,6 +88,8 @@ app:
   bge-m3:
     url: http://localhost:8081/embed
   rag:
+    # 查询改写专用模型（轻量快速）
+    rewrite-model: deepseek-v4-flash
     chunk-size: 512
     chunk-overlap: 50
     top-k: 5
