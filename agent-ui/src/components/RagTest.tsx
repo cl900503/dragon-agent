@@ -25,15 +25,6 @@ interface TraceItem {
   contentSnippet: string
 }
 
-interface DebugResult {
-  query: string
-  totalMs: number
-  steps: DebugStep[]
-  finalTraces: TraceItem[]
-  finalContext: string
-  finalCount: number
-}
-
 const KEY_LABELS: Record<string, string> = {
   intent: '意图分类',
   intentDesc: '分类说明',
@@ -78,36 +69,51 @@ const STATUS_TAG: Record<string, { label: string; cls: string }> = {
 export default function RagTest() {
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<DebugResult | null>(null)
+  const [steps, setSteps] = useState<DebugStep[]>([])
+  const [finalTraces, setFinalTraces] = useState<TraceItem[]>([])
+  const [finalContext, setFinalContext] = useState('')
+  const [finalCount, setFinalCount] = useState(0)
+  const [totalMs, setTotalMs] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
   const [expandedChunks, setExpandedChunks] = useState<Set<number>>(new Set())
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const search = async () => {
+  const search = () => {
     const q = query.trim()
     if (!q) return
     setLoading(true)
     setError(null)
-    setResult(null)
+    setSteps([])
+    setFinalTraces([])
+    setFinalContext('')
+    setFinalCount(0)
+    setTotalMs(0)
 
-    try {
-      const res = await fetch('/api/rag/debug', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: q }),
-      })
+    fetch('/api/rag/debug', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: q }),
+    }).then(async (res) => {
       const data = await res.json()
-      if (!res.ok) {
-        setError(data.error || `HTTP ${res.status}`)
-        return
+      if (!res.ok) { setError(data.error); setLoading(false); return }
+
+      // 逐步动画：一个接一个渲染步骤
+      const allSteps = (data.steps || []) as DebugStep[]
+      for (let i = 0; i < allSteps.length; i++) {
+        setSteps(prev => [...prev, allSteps[i]])
+        await new Promise(r => setTimeout(r, 300))
       }
-      setResult(data)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '请求失败')
-    } finally {
+
+      setFinalTraces(data.finalTraces || [])
+      setFinalContext(data.finalContext || '')
+      setFinalCount(data.finalCount || 0)
+      setTotalMs(data.totalMs || 0)
       setLoading(false)
-    }
+    }).catch(e => {
+      setError(e instanceof Error ? e.message : '请求失败')
+      setLoading(false)
+    })
   }
 
   const toggleStep = (i: number) => {
@@ -126,7 +132,8 @@ export default function RagTest() {
     })
   }
 
-  const maxScore = result ? Math.max(...result.finalTraces.map(t => t.score), 0) : 0
+  const maxScore = finalTraces.length > 0 ? Math.max(...finalTraces.map(t => t.score)) : 0
+  const hasResult = steps.length > 0 || finalTraces.length > 0 || loading
 
   return (
     <div className="ragtest-page">
@@ -151,24 +158,21 @@ export default function RagTest() {
       {error && <div className="rt-error">{error}</div>}
 
       {/* 管线可视化 */}
-      {result && (
+      {hasResult && (
         <div className="rt-pipeline">
           {/* 总耗时 */}
           <div className="rt-total-bar">
-            <span className="rt-total-label">查询: "{result.query}"</span>
-            <span className="rt-total-ms">总耗时 {result.totalMs}ms</span>
+            <span className="rt-total-label">查询: "{query.trim()}"</span>
+            <span className="rt-total-ms">{totalMs > 0 ? `总耗时 ${totalMs}ms` : '执行中...'}</span>
           </div>
 
           {/* 步骤列表 */}
           <div className="rt-steps">
-            {result.steps.map((s, i) => (
+            {steps.map((s, i) => (
               <div key={i} className="rt-step-wrap">
-                {/* 连接线 */}
-                {i < result.steps.length - 1 && (
+                {i < steps.length - 1 && (
                   <div className={`rt-connector ${s.status === 'error' || s.status === 'empty' ? 'rt-conn-dim' : ''}`} />
                 )}
-
-                {/* 步骤卡片 */}
                 <div
                   className={`rt-step-card ${s.status === 'error' ? 'rt-step-err' : s.status === 'warning' ? 'rt-step-warn' : s.status === 'empty' ? 'rt-step-empty' : ''}`}
                   onClick={() => toggleStep(i)}
@@ -184,19 +188,13 @@ export default function RagTest() {
                     <span className="rt-step-ms">{s.durationMs}ms</span>
                     <span className="rt-step-toggle">{expanded.has(i) ? '▲' : '▼'}</span>
                   </div>
-
-                  {/* 展开详情 */}
                   {expanded.has(i) && (
                     <div className="rt-step-detail">
                       {Object.entries(s.detail).map(([k, v]) => (
                         <div key={k} className="rt-detail-row">
                           <span className="rt-detail-key">{KEY_LABELS[k] || k}</span>
                           <span className="rt-detail-val">
-                            {Array.isArray(v)
-                              ? v.join(', ')
-                              : typeof v === 'boolean'
-                                ? v ? '是' : '否'
-                                : String(v)}
+                            {Array.isArray(v) ? v.join(', ') : typeof v === 'boolean' ? v ? '是' : '否' : String(v)}
                           </span>
                         </div>
                       ))}
@@ -205,17 +203,44 @@ export default function RagTest() {
                 </div>
               </div>
             ))}
+            {/* 加载指示器 */}
+            {loading && steps.length < 5 && (
+              <div className="rt-step-wrap">
+                {steps.length > 0 && <div className="rt-connector" />}
+                <div className="rt-step-card rt-step-running">
+                  <div className="rt-step-loader">
+                    <span className="rt-step-icon">⏳</span>
+                    <span>正在执行第 {steps.length + 1} 步</span>
+                    <span className="rt-loader-dot" />
+                    <span className="rt-loader-dot" />
+                    <span className="rt-loader-dot" />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
+          {/* 管线输出分隔 */}
+          {(finalTraces.length > 0 || finalContext) && (
+            <div className="rt-output-zone">
+              <div className="rt-output-divider">
+                <span className="rt-output-dline" />
+                <span className="rt-output-dlabel">输出</span>
+                <span className="rt-output-dline" />
+              </div>
+            </div>
+          )}
+
           {/* 检索结果 */}
-          {result.finalTraces.length > 0 && (
-            <section className="rt-section">
-              <h3>
-                📋 检索结果
-                <span className="rt-section-badge">{result.finalCount} 段</span>
-              </h3>
+          {finalTraces.length > 0 && (
+            <div className="rt-output-card">
+              <div className="rt-output-head">
+                <span className="rt-output-icon">📋</span>
+                <span className="rt-output-title">检索结果</span>
+                <span className="rt-output-badge">{finalCount} 个片段</span>
+              </div>
               <div className="rt-chunks">
-                {result.finalTraces.map((t, i) => (
+                {finalTraces.map((t, i) => (
                   <div key={i} className={`rt-chunk ${t.score === maxScore ? 'rt-chunk-top' : ''}`}>
                     <div className="rt-chunk-header" onClick={() => toggleChunk(i)}>
                       <span className="rt-chunk-num">#{i + 1}</span>
@@ -227,28 +252,30 @@ export default function RagTest() {
                       <span className="rt-chunk-toggle">{expandedChunks.has(i) ? '▲' : '▼'}</span>
                     </div>
                     {expandedChunks.has(i) && (
-                      <div className="rt-chunk-body">
-                        <pre className="rt-chunk-text">{t.contentSnippet}</pre>
-                      </div>
+                      <div className="rt-chunk-body"><pre className="rt-content rt-content-scroll">{t.contentSnippet}</pre></div>
                     )}
                   </div>
                 ))}
               </div>
-            </section>
+            </div>
           )}
 
           {/* LLM 上下文 */}
-          {result.finalContext && (
-            <section className="rt-section">
-              <h3>📄 发送给 LLM 的上下文</h3>
-              <pre className="rt-context">{result.finalContext}</pre>
-            </section>
+          {finalContext && (
+            <div className="rt-output-card">
+              <div className="rt-output-head">
+                <span className="rt-output-icon">📄</span>
+                <span className="rt-output-title">发送给 LLM 的上下文</span>
+                <span className="rt-output-badge">{finalContext.length} 字符</span>
+              </div>
+              <pre className="rt-content rt-content-tall">{finalContext}</pre>
+            </div>
           )}
         </div>
       )}
 
       {/* 空状态 */}
-      {!result && !loading && !error && (
+      {!hasResult && !error && (
         <div className="rt-empty-state">
           <div className="rt-empty-icon">🔍</div>
           <p>输入查询文本，查看 RAG 检索管线的完整执行过程</p>

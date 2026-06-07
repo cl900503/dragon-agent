@@ -15,296 +15,215 @@ import org.springframework.stereotype.Service;
 
 import com.dragon.agent.service.KnowledgeBaseService;
 
-/**
- * RAG 管线调试服务——逐步执行检索管线并收集每步的中间结果。
- *
- * <p>供前端语义检索调试页使用，展示 5 步管线的完整执行过程：
- * <ol>
- *   <li>查询改写 —— 意图分类 + LLM 改写变体</li>
- *   <li>多路检索 —— Dense + Sparse + BM25 三路召回 + RRF 融合</li>
- *   <li>重排序 —— Cross-Encoder + MMR 多样性去重</li>
- *   <li>阈值过滤 —— similarity-threshold 过滤低分文档</li>
- *   <li>上下文构建 —— Lost-in-Middle 重排 + 结构化引用</li>
- * </ol>
- *
- * @author 陈龙
- * @since 2026-06-07
- */
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.FluxSink;
+
 @Service
 public class RagDebugService {
 
     private static final Logger log = LoggerFactory.getLogger(RagDebugService.class);
 
-    @Autowired
-    private BgeM3Client bgeM3;
+    @Autowired private BgeM3Client bgeM3;
+    @Autowired private HybridSearchService hybridSearch;
+    @Autowired private RerankService rerankService;
+    @Autowired(required = false) private VectorStore vectorStore;
+    @Autowired(required = false) private QueryProcessor queryProcessor;
+    @Autowired private KnowledgeBaseService knowledgeBaseService;
+    @Autowired private RagSearchService ragSearchService;
 
-    @Autowired
-    private HybridSearchService hybridSearch;
+    public record DebugResult(String query, long totalMs, List<PipelineStep> steps,
+            List<Map<String, Object>> finalTraces, String finalContext, int finalCount) {}
+    public record PipelineStep(int step, String name, String icon, long durationMs,
+            String status, String summary, Map<String, Object> detail) {}
 
-    @Autowired
-    private RerankService rerankService;
-
-    @Autowired(required = false)
-    private VectorStore vectorStore;
-
-    @Autowired(required = false)
-    private QueryProcessor queryProcessor;
-
-    @Autowired
-    private KnowledgeBaseService knowledgeBaseService;
-
-    @Autowired
-    private RagSearchService ragSearchService;
-
-    /**
-     * 调试结果——包含所有步骤的中间数据和最终结果。
-     */
-    public record DebugResult(
-            String query,
-            long totalMs,
-            List<PipelineStep> steps,
-            List<Map<String, Object>> finalTraces,
-            String finalContext,
-            int finalCount) {
-    }
-
-    /**
-     * 管线单步记录。
-     */
-    public record PipelineStep(
-            int step,
-            String name,
-            String icon,
-            long durationMs,
-            String status,     // "success" | "warning" | "empty"
-            String summary,
-            Map<String, Object> detail) {
-    }
-
-    /**
-     * 执行完整的 RAG 管线并收集每步的调试信息。
-     */
-    @SuppressWarnings("unchecked")
+    /** 同步一次性调试 */
     public DebugResult debug(String query, Long userId) {
-        try {
-            return doDebug(query, userId);
-        } catch (Exception e) {
-            log.error("RAG debug failed: {}", e.getMessage(), e);
-            List<PipelineStep> steps = new ArrayList<>();
-            steps.add(new PipelineStep(0, "错误", "❌", 0, "error", e.getMessage(), Map.of("exception", e.getClass().getName())));
-            return new DebugResult(query, 0, steps, List.of(), "", 0);
+        try { return doDebug(query, userId); } catch (Exception e) {
+            log.error("RAG debug failed", e);
+            return new DebugResult(query, 0, List.of(new PipelineStep(0, "错误", "❌", 0, "error", e.getMessage(), Map.of())), List.of(), "", 0);
         }
     }
 
+    /** 流式 SSE 调试——每个 step 实时推送 */
+    @SuppressWarnings("unchecked")
+    public Flux<Map<String, Object>> debugStream(String query, Long userId) {
+        return Flux.create(sink -> {
+            Thread t = new Thread(() -> {
+                try {
+                    long totalStart = now();
+                    if (vectorStore == null || userId == null) { sink.next(error("向量存储或用户未就绪")); sink.complete(); return; }
+
+                    List<String> kbIds = knowledgeBaseService.getAccessibleKbIds(userId);
+                    StringBuilder fb = new StringBuilder("userId == '" + userId + "'");
+                    if (!kbIds.isEmpty()) { fb.append(" || kbId in ["); fb.append(kbIds.stream().map(id -> "'" + id + "'").collect(Collectors.joining(", "))); fb.append("]"); }
+                    String filterExpr = fb.toString();
+                    String searchQuery = query;
+                    List<Document> chain = List.of();
+
+                    // Step 1: 查询改写
+                    long t1 = now(); Map<String, Object> d1 = new LinkedHashMap<>();
+                    List<String> variants = List.of(query); String intent = "未分类"; boolean rt = false, llm = false;
+                    if (queryProcessor != null) { var qi = queryProcessor.classify(query); intent = qi.name(); d1.put("intent", intent); d1.put("intentDesc", desc(qi));
+                        if (qi == QueryProcessor.QueryIntent.SHORT_KEYWORD || qi == QueryProcessor.QueryIntent.COMPARATIVE) { llm = true;
+                            try { var f = java.util.concurrent.CompletableFuture.supplyAsync(() -> queryProcessor.rewrite(query)); variants = f.get(5, java.util.concurrent.TimeUnit.SECONDS); } catch (Exception e) { rt = true; variants = List.of(query); }
+                            d1.put("rewritten", variants.size() > 1); d1.put("rewriteTimedOut", rt); d1.put("llmCalled", true); d1.put("variants", variants);
+                            searchQuery = variants.size() > 1 ? variants.get(1) : variants.get(0); } else { d1.put("rewritten", false); } }
+                    sink.next(step(1, "查询改写", "🔄", now() - t1, llm ? (rt ? "warning" : "success") : "info",
+                            variants.size() > 1 ? "分类:" + intent + " → 生成 " + (variants.size() - 1) + " 个改写变体" : rt ? "分类:" + intent + " → 改写超时" : llm ? "分类:" + intent + " → 改写完成" : "分类:" + intent + "，无需改写", d1));
+                    Thread.sleep(80);
+
+                    // Step 2: 多路检索
+                    long t2 = now(); Map<String, Object> d2 = new LinkedHashMap<>();
+                    Map<String, Object> emb = bgeM3.embed(searchQuery);
+                    if (emb == null || !emb.containsKey("dense")) { sink.next(error("Embedding 失败")); sink.complete(); return; }
+                    d2.put("denseVectorDim", ((List<Double>) emb.get("dense")).size()); d2.put("sparseAvailable", emb.containsKey("sparse"));
+                    d2.put("fusionMethod", "WeightedRanker(Dense 0.7+Sparse 0.2)+RRF(BM25 0.1)"); d2.put("filterExpr", filterExpr);
+                    Map<String, Object> sv = (Map<String, Object>) emb.get("sparse");
+                    var vr = hybridSearch.hybridSearch((List<Double>) emb.get("dense"), sv, filterExpr, 20, searchQuery, 0.7f, 0.2f);
+                    d2.put("candidatesAfterFusion", vr.size());
+                    chain = vr.stream().map(r -> { Document d = new Document((String) r.getOrDefault("content", ""), new LinkedHashMap<>(r)); Object s = r.get("score"); if (s instanceof Number) d.getMetadata().put("score", ((Number) s).doubleValue()); return d; }).collect(Collectors.toList());
+                    sink.next(step(2, "多路检索", "🔎", now() - t2, vr.isEmpty() ? "empty" : "success", "Dense+Sparse+BM25 → RRF融合 → " + vr.size() + " 条候选", d2));
+                    Thread.sleep(80);
+                    if (vr.isEmpty()) { sink.next(finalEvt(query, now() - totalStart, List.of(), "", 0)); sink.complete(); return; }
+
+                    // Step 3: 重排序
+                    long t3 = now(); Map<String, Object> d3 = new LinkedHashMap<>();
+                    d3.put("candidatesBeforeRerank", chain.size()); d3.put("crossEncoderModel", "BGE-Reranker-v2-m3"); d3.put("mmrEnabled", true); d3.put("mmrLambda", 0.7);
+                    var rr3 = rerankService.rerank(searchQuery, chain); chain = rr3.documents();
+                    for (int i = 0; i < Math.min(chain.size(), rr3.scores().size()); i++) chain.get(i).getMetadata().put("score", rr3.scores().get(i).score());
+                    d3.put("afterCrossEncoder", chain.size());
+                    sink.next(step(3, "重排序", "📊", now() - t3, chain.isEmpty() ? "empty" : "success", "Cross-Encoder+MMR → " + d3.get("candidatesBeforeRerank") + "→" + chain.size() + " 条", d3));
+                    Thread.sleep(80);
+
+                    // Step 4: 阈值过滤
+                    long t4 = now(); Map<String, Object> d4 = new LinkedHashMap<>(); d4.put("threshold", 0.2); d4.put("beforeFilter", chain.size());
+                    var f4 = chain.stream().filter(d -> { Object s = d.getMetadata().get("score"); return s instanceof Number && ((Number) s).doubleValue() >= 0.2; }).collect(Collectors.toList());
+                    if (f4.isEmpty() && !chain.isEmpty()) { f4 = List.of(chain.get(0)); d4.put("fallback", "全部低于阈值"); }
+                    d4.put("afterFilter", f4.size()); d4.put("removedCount", chain.size() - f4.size()); chain = f4;
+                    sink.next(step(4, "阈值过滤", "✂️", now() - t4, f4.size() < (int) d4.get("beforeFilter") ? "filtered" : "success", "阈值 0.2 → " + d4.get("beforeFilter") + "→" + f4.size() + " 条", d4));
+                    Thread.sleep(80);
+
+                    // Step 5: 上下文构建
+                    long t5 = now(); Map<String, Object> d5 = new LinkedHashMap<>();
+                    String ctxt = ragSearchService.formatContext(chain); List<Map<String, Object>> traces = ragSearchService.buildTraces(chain);
+                    d5.put("lostInMiddle", true); d5.put("contentDedupApplied", true); d5.put("uniqueDocuments", traces.stream().map(tr -> (String) tr.get("documentName")).distinct().count()); d5.put("contextLength", ctxt.length());
+                    sink.next(step(5, "上下文构建", "📝", now() - t5, "success", "Lost-in-Middle+去重 → " + traces.size() + " 段，共 " + ctxt.length() + " 字符", d5));
+                    Thread.sleep(80);
+
+                    sink.next(finalEvt(query, now() - totalStart, traces, ctxt, traces.size()));
+                } catch (InterruptedException e) { Thread.currentThread().interrupt();
+                } catch (Exception e) { log.error("debugStream failed", e); sink.next(error(e.getClass().getSimpleName() + ": " + e.getMessage())); }
+                sink.complete();
+            }, "rag-debug-stream");
+            t.setDaemon(true);
+            t.start();
+        }, FluxSink.OverflowStrategy.BUFFER);
+    }
+
+    /** 分步回调（轮询用） */
+    @SuppressWarnings("unchecked")
+    public void debugStepByStep(String query, Long userId, java.util.function.Consumer<PipelineStep> cb, java.util.function.Consumer<DebugResult> done) {
+        try {
+            long totalStart = now();
+            if (vectorStore == null || userId == null) return;
+            List<String> kbIds = knowledgeBaseService.getAccessibleKbIds(userId);
+            StringBuilder fb = new StringBuilder("userId == '" + userId + "'");
+            if (!kbIds.isEmpty()) { fb.append(" || kbId in ["); fb.append(kbIds.stream().map(id -> "'" + id + "'").collect(Collectors.joining(", "))); fb.append("]"); }
+            String filterExpr = fb.toString(); String searchQuery = query; List<Document> chain = List.of();
+
+            long t1 = now(); Map<String, Object> d1 = new LinkedHashMap<>();
+            List<String> variants = List.of(query); String intent = "未分类"; boolean rt = false, llm = false;
+            if (queryProcessor != null) { var qi = queryProcessor.classify(query); intent = qi.name(); d1.put("intent", intent); d1.put("intentDesc", desc(qi));
+                if (qi == QueryProcessor.QueryIntent.SHORT_KEYWORD || qi == QueryProcessor.QueryIntent.COMPARATIVE) { llm = true;
+                    try { var f = java.util.concurrent.CompletableFuture.supplyAsync(() -> queryProcessor.rewrite(query)); variants = f.get(5, java.util.concurrent.TimeUnit.SECONDS); } catch (Exception e) { rt = true; variants = List.of(query); }
+                    d1.put("rewritten", variants.size() > 1); d1.put("rewriteTimedOut", rt); d1.put("llmCalled", true); d1.put("variants", variants);
+                    searchQuery = variants.size() > 1 ? variants.get(1) : variants.get(0); } else { d1.put("rewritten", false); } }
+            cb.accept(new PipelineStep(1, "查询改写", "🔄", now() - t1, llm ? (rt ? "warning" : "success") : "info", variants.size() > 1 ? "分类:" + intent + " → 生成 " + (variants.size() - 1) + " 个改写变体" : rt ? "分类:" + intent + " → 改写超时" : llm ? "分类:" + intent + " → 改写完成" : "分类:" + intent + "，无需改写", d1));
+
+            long t2 = now(); Map<String, Object> d2 = new LinkedHashMap<>();
+            Map<String, Object> emb = bgeM3.embed(searchQuery);
+            if (emb == null || !emb.containsKey("dense")) { done.accept(new DebugResult(query, now() - totalStart, List.of(), List.of(), "", 0)); return; }
+            d2.put("denseVectorDim", ((List<Double>) emb.get("dense")).size()); d2.put("sparseAvailable", emb.containsKey("sparse")); d2.put("fusionMethod", "WeightedRanker(Dense 0.7+Sparse 0.2)+RRF(BM25 0.1)"); d2.put("filterExpr", filterExpr);
+            Map<String, Object> sv = (Map<String, Object>) emb.get("sparse");
+            var vr = hybridSearch.hybridSearch((List<Double>) emb.get("dense"), sv, filterExpr, 20, searchQuery, 0.7f, 0.2f); d2.put("candidatesAfterFusion", vr.size());
+            chain = vr.stream().map(r -> { Document d = new Document((String) r.getOrDefault("content", ""), new LinkedHashMap<>(r)); Object s = r.get("score"); if (s instanceof Number) d.getMetadata().put("score", ((Number) s).doubleValue()); return d; }).collect(Collectors.toList());
+            cb.accept(new PipelineStep(2, "多路检索", "🔎", now() - t2, vr.isEmpty() ? "empty" : "success", "Dense+Sparse+BM25 → RRF融合 → " + vr.size() + " 条候选", d2));
+            if (vr.isEmpty()) { done.accept(new DebugResult(query, now() - totalStart, List.of(), List.of(), "", 0)); return; }
+
+            long t3 = now(); Map<String, Object> d3 = new LinkedHashMap<>(); d3.put("candidatesBeforeRerank", chain.size()); d3.put("crossEncoderModel", "BGE-Reranker-v2-m3"); d3.put("mmrEnabled", true); d3.put("mmrLambda", 0.7);
+            var rr3 = rerankService.rerank(searchQuery, chain); chain = rr3.documents();
+            for (int i = 0; i < Math.min(chain.size(), rr3.scores().size()); i++) chain.get(i).getMetadata().put("score", rr3.scores().get(i).score()); d3.put("afterCrossEncoder", chain.size());
+            cb.accept(new PipelineStep(3, "重排序", "📊", now() - t3, chain.isEmpty() ? "empty" : "success", "Cross-Encoder+MMR → " + d3.get("candidatesBeforeRerank") + "→" + chain.size() + " 条", d3));
+
+            long t4 = now(); Map<String, Object> d4 = new LinkedHashMap<>(); d4.put("threshold", 0.2); d4.put("beforeFilter", chain.size());
+            var f4 = chain.stream().filter(d -> { Object s = d.getMetadata().get("score"); return s instanceof Number && ((Number) s).doubleValue() >= 0.2; }).collect(Collectors.toList());
+            if (f4.isEmpty() && !chain.isEmpty()) { f4 = List.of(chain.get(0)); d4.put("fallback", "全部低于阈值"); } d4.put("afterFilter", f4.size()); d4.put("removedCount", chain.size() - f4.size()); chain = f4;
+            cb.accept(new PipelineStep(4, "阈值过滤", "✂️", now() - t4, f4.size() < (int) d4.get("beforeFilter") ? "filtered" : "success", "阈值 0.2 → " + d4.get("beforeFilter") + "→" + f4.size() + " 条", d4));
+
+            long t5 = now(); Map<String, Object> d5 = new LinkedHashMap<>();
+            String ctxt = ragSearchService.formatContext(chain); List<Map<String, Object>> traces = ragSearchService.buildTraces(chain);
+            d5.put("lostInMiddle", true); d5.put("contentDedupApplied", true); d5.put("uniqueDocuments", traces.stream().map(tr -> (String) tr.get("documentName")).distinct().count()); d5.put("contextLength", ctxt.length());
+            cb.accept(new PipelineStep(5, "上下文构建", "📝", now() - t5, "success", "Lost-in-Middle+去重 → " + traces.size() + " 段，共 " + ctxt.length() + " 字符", d5));
+
+            done.accept(new DebugResult(query, now() - totalStart, List.of(), traces, ctxt, traces.size()));
+        } catch (Exception e) { log.error("debugStepByStep failed", e); }
+    }
+
+    // ========== helpers ==========
+
+    private long now() { return System.currentTimeMillis(); }
+    private String desc(QueryProcessor.QueryIntent i) { return switch (i) { case SHORT_KEYWORD -> "短关键词"; case FACTUAL -> "事实查询"; case REASONING -> "推理查询"; case COMPARATIVE -> "对比查询"; }; }
+    private static Map<String, Object> step(int s, String n, String ic, long ms, String st, String sum, Map<String, Object> d) { Map<String, Object> e = new LinkedHashMap<>(); e.put("type", "step"); e.put("step", s); e.put("name", n); e.put("icon", ic); e.put("durationMs", ms); e.put("status", st); e.put("summary", sum); e.put("detail", d); return e; }
+    private static Map<String, Object> finalEvt(String q, long ms, List<Map<String, Object>> tr, String ctx, int cnt) { Map<String, Object> e = new LinkedHashMap<>(); e.put("type", "final"); e.put("query", q); e.put("totalMs", ms); e.put("finalTraces", tr); e.put("finalContext", ctx); e.put("finalCount", cnt); return e; }
+    private static Map<String, Object> error(String msg) { Map<String, Object> e = new LinkedHashMap<>(); e.put("type", "error"); e.put("error", msg); return e; }
+
+    // ========== 同步 debug 内部实现 ==========
+
+    @SuppressWarnings("unchecked")
     private DebugResult doDebug(String query, Long userId) {
-        long totalStart = System.currentTimeMillis();
+        long totalStart = now();
+        if (vectorStore == null || userId == null) return new DebugResult(query, 0, List.of(), List.of(), "", 0);
         List<PipelineStep> steps = new ArrayList<>();
 
-        if (vectorStore == null || userId == null) {
-            return new DebugResult(query, System.currentTimeMillis() - totalStart, steps, List.of(), "", 0);
-        }
+        List<String> kbIds = knowledgeBaseService.getAccessibleKbIds(userId);
+        StringBuilder fb = new StringBuilder("userId == '" + userId + "'");
+        if (!kbIds.isEmpty()) { fb.append(" || kbId in ["); fb.append(kbIds.stream().map(id -> "'" + id + "'").collect(Collectors.joining(", "))); fb.append("]"); }
+        String filterExpr = fb.toString(); String searchQuery = query; List<Document> chain = List.of();
 
-        // ======  Step 1: 查询改写 ======
-        long t1 = System.currentTimeMillis();
-        Map<String, Object> step1Detail = new LinkedHashMap<>();
-        String searchQuery = query;
-        List<String> variants = List.of(query);
+        long t1 = now(); Map<String, Object> d1 = new LinkedHashMap<>();
+        List<String> variants = List.of(query); String intent = "未分类"; boolean rt = false, llm = false;
+        if (queryProcessor != null) { var qi = queryProcessor.classify(query); intent = qi.name(); d1.put("intent", intent); d1.put("intentDesc", desc(qi));
+            if (qi == QueryProcessor.QueryIntent.SHORT_KEYWORD || qi == QueryProcessor.QueryIntent.COMPARATIVE) { llm = true;
+                try { var f = java.util.concurrent.CompletableFuture.supplyAsync(() -> queryProcessor.rewrite(query)); variants = f.get(5, java.util.concurrent.TimeUnit.SECONDS); } catch (Exception e) { rt = true; variants = List.of(query); }
+                d1.put("rewritten", variants.size() > 1); d1.put("rewriteTimedOut", rt); d1.put("llmCalled", true); d1.put("variants", variants);
+                searchQuery = variants.size() > 1 ? variants.get(1) : variants.get(0); } else { d1.put("rewritten", false); } }
+        steps.add(new PipelineStep(1, "查询改写", "🔄", now() - t1, llm ? (rt ? "warning" : "success") : "info", variants.size() > 1 ? "分类:" + intent + " → 生成 " + (variants.size() - 1) + " 个改写变体" : rt ? "分类:" + intent + " → 改写超时" : llm ? "分类:" + intent + " → 改写完成" : "分类:" + intent + "，无需改写", d1));
 
-        String intent = "未分类";
-        boolean rewriteTimedOut = false;
-        boolean llmCalled = false;
-        if (queryProcessor != null) {
-            var qi = queryProcessor.classify(query);
-            intent = qi.name();
-            step1Detail.put("intent", intent);
-            step1Detail.put("intentDesc", describeIntent(qi));
-
-            if (qi == QueryProcessor.QueryIntent.SHORT_KEYWORD || qi == QueryProcessor.QueryIntent.COMPARATIVE) {
-                llmCalled = true;
-                try {
-                    var future = java.util.concurrent.CompletableFuture.supplyAsync(
-                            () -> queryProcessor.rewrite(query));
-                    variants = future.get(5, java.util.concurrent.TimeUnit.SECONDS);
-                } catch (Exception e) {
-                    log.warn("Query rewrite timeout or failed: {}", e.getMessage());
-                    rewriteTimedOut = true;
-                    variants = List.of(query);
-                }
-                boolean actuallyRewritten = variants.size() > 1;
-                step1Detail.put("rewritten", actuallyRewritten);
-                step1Detail.put("rewriteTimedOut", rewriteTimedOut);
-                step1Detail.put("variants", variants);
-                searchQuery = actuallyRewritten ? variants.get(1) : variants.get(0);
-            } else {
-                step1Detail.put("rewritten", false);
-            }
-        } else {
-            step1Detail.put("rewritten", false);
-            step1Detail.put("note", "QueryProcessor 未注入");
-        }
-
-        long step1Ms = System.currentTimeMillis() - t1;
-        String step1Status = llmCalled ? (rewriteTimedOut ? "warning" : "success") : "info";
-        String step1Summary;
-        if (variants.size() > 1) {
-            step1Summary = "分类: " + intent + " → 生成 " + (variants.size() - 1) + " 个改写变体";
-        } else if (rewriteTimedOut) {
-            step1Summary = "分类: " + intent + " → 改写超时，使用原查询";
-        } else if (llmCalled) {
-            step1Summary = "分类: " + intent + " → 改写完成，使用原查询";
-        } else {
-            step1Summary = "分类: " + intent + "，无需改写";
-        }
-        steps.add(new PipelineStep(1, "查询改写", "🔄", step1Ms, step1Status, step1Summary, step1Detail));
-
-        // ====== Step 2: 多路检索 ======
-        long t2 = System.currentTimeMillis();
-        Map<String, Object> step2Detail = new LinkedHashMap<>();
-
-        // Embedding
+        long t2 = now(); Map<String, Object> d2 = new LinkedHashMap<>();
         Map<String, Object> emb = bgeM3.embed(searchQuery);
-        if (emb == null || !emb.containsKey("dense")) {
-            steps.add(new PipelineStep(2, "多路检索", "🔎", System.currentTimeMillis() - t2,
-                    "error", "Embedding 失败", Map.of("error", "BGE-M3 返回空")));
-            return new DebugResult(query, System.currentTimeMillis() - totalStart, steps, List.of(), "", 0);
-        }
+        if (emb == null || !emb.containsKey("dense")) return new DebugResult(query, now() - totalStart, steps, List.of(), "", 0);
+        d2.put("denseVectorDim", ((List<Double>) emb.get("dense")).size()); d2.put("sparseAvailable", emb.containsKey("sparse")); d2.put("fusionMethod", "WeightedRanker(Dense 0.7+Sparse 0.2)+RRF(BM25 0.1)"); d2.put("filterExpr", filterExpr);
+        Map<String, Object> sv = (Map<String, Object>) emb.get("sparse");
+        var vr = hybridSearch.hybridSearch((List<Double>) emb.get("dense"), sv, filterExpr, 20, searchQuery, 0.7f, 0.2f); d2.put("candidatesAfterFusion", vr.size());
+        chain = vr.stream().map(r -> { Document d = new Document((String) r.getOrDefault("content", ""), new LinkedHashMap<>(r)); Object s = r.get("score"); if (s instanceof Number) d.getMetadata().put("score", ((Number) s).doubleValue()); return d; }).collect(Collectors.toList());
+        steps.add(new PipelineStep(2, "多路检索", "🔎", now() - t2, vr.isEmpty() ? "empty" : "success", "Dense+Sparse+BM25 → RRF融合 → " + vr.size() + " 条候选", d2));
+        if (vr.isEmpty()) return new DebugResult(query, now() - totalStart, steps, List.of(), "", 0);
 
-        // 数据过滤
-        List<String> accessibleKbIds = knowledgeBaseService.getAccessibleKbIds(userId);
-        StringBuilder filter = new StringBuilder("userId == '" + userId + "'");
-        if (!accessibleKbIds.isEmpty()) {
-            filter.append(" || kbId in [");
-            filter.append(accessibleKbIds.stream().map(id -> "'" + id + "'").collect(Collectors.joining(", ")));
-            filter.append("]");
-        }
-        String filterExpr = filter.toString();
-        step2Detail.put("filterExpr", filterExpr);
+        long t3 = now(); Map<String, Object> d3 = new LinkedHashMap<>(); d3.put("candidatesBeforeRerank", chain.size()); d3.put("crossEncoderModel", "BGE-Reranker-v2-m3"); d3.put("mmrEnabled", true); d3.put("mmrLambda", 0.7);
+        var rr3 = rerankService.rerank(searchQuery, chain); chain = rr3.documents();
+        for (int i = 0; i < Math.min(chain.size(), rr3.scores().size()); i++) chain.get(i).getMetadata().put("score", rr3.scores().get(i).score()); d3.put("afterCrossEncoder", chain.size());
+        steps.add(new PipelineStep(3, "重排序", "📊", now() - t3, chain.isEmpty() ? "empty" : "success", "Cross-Encoder+MMR → " + d3.get("candidatesBeforeRerank") + "→" + chain.size() + " 条", d3));
 
-        // 三路检索
-        Map<String, Object> sparseVec = (Map<String, Object>) emb.get("sparse");
-        List<Double> denseVec = (List<Double>) emb.get("dense");
-        int topK = 20;
+        long t4 = now(); Map<String, Object> d4 = new LinkedHashMap<>(); d4.put("threshold", 0.2); d4.put("beforeFilter", chain.size());
+        var f4 = chain.stream().filter(d -> { Object s = d.getMetadata().get("score"); return s instanceof Number && ((Number) s).doubleValue() >= 0.2; }).collect(Collectors.toList());
+        if (f4.isEmpty() && !chain.isEmpty()) { f4 = List.of(chain.get(0)); d4.put("fallback", "全部低于阈值"); } d4.put("afterFilter", f4.size()); d4.put("removedCount", chain.size() - f4.size()); chain = f4;
+        steps.add(new PipelineStep(4, "阈值过滤", "✂️", now() - t4, f4.size() < (int) d4.get("beforeFilter") ? "filtered" : "success", "阈值 0.2 → " + d4.get("beforeFilter") + "→" + f4.size() + " 条", d4));
 
-        var vectorResults = hybridSearch.hybridSearch(denseVec, sparseVec, filterExpr, topK, searchQuery, 0.7f, 0.2f);
+        long t5 = now(); Map<String, Object> d5 = new LinkedHashMap<>();
+        String ctxt = ragSearchService.formatContext(chain); List<Map<String, Object>> traces = ragSearchService.buildTraces(chain);
+        d5.put("lostInMiddle", true); d5.put("contentDedupApplied", true); d5.put("uniqueDocuments", traces.stream().map(tr -> (String) tr.get("documentName")).distinct().count()); d5.put("contextLength", ctxt.length());
+        steps.add(new PipelineStep(5, "上下文构建", "📝", now() - t5, "success", "Lost-in-Middle+去重 → " + traces.size() + " 段，共 " + ctxt.length() + " 字符", d5));
 
-        // 统计各路结果（从 hybridSearch 无法直接拿到分路数据，做近似估算）
-        step2Detail.put("denseVectorDim", denseVec.size());
-        step2Detail.put("sparseAvailable", sparseVec != null && sparseVec.containsKey("indices"));
-        step2Detail.put("fusionMethod", "WeightedRanker(Dense 0.7 + Sparse 0.2) + RRF(BM25 0.1)");
-        step2Detail.put("candidatesAfterFusion", vectorResults.size());
-        step2Detail.put("topKCandidates", Math.min(vectorResults.size(), topK));
-
-        if (!vectorResults.isEmpty()) {
-            double topScore = vectorResults.stream()
-                    .mapToDouble(r -> ((Number) r.getOrDefault("score", 0)).doubleValue()).max().orElse(0);
-            step2Detail.put("topScoreAfterFusion", String.format("%.4f", topScore));
-        }
-
-        long step2Ms = System.currentTimeMillis() - t2;
-        steps.add(new PipelineStep(2, "多路检索", "🔎", step2Ms,
-                vectorResults.isEmpty() ? "empty" : "success",
-                "Dense + Sparse + BM25 → RRF 融合 → " + vectorResults.size() + " 条候选",
-                step2Detail));
-
-        if (vectorResults.isEmpty()) {
-            return new DebugResult(query, System.currentTimeMillis() - totalStart, steps, List.of(), "", 0);
-        }
-
-        // ====== Step 3: 重排序 ======
-        long t3 = System.currentTimeMillis();
-        Map<String, Object> step3Detail = new LinkedHashMap<>();
-
-        List<Document> candidates = vectorResults.stream().map(r -> {
-            Document d = new Document((String) r.getOrDefault("content", ""), new LinkedHashMap<>(r));
-            Object s = r.get("score");
-            if (s instanceof Number) {
-                d.getMetadata().put("score", ((Number) s).doubleValue());
-            }
-            return d;
-        }).collect(Collectors.toList());
-
-        var rerankResult = rerankService.rerank(searchQuery, candidates);
-        List<Document> results = rerankResult.documents();
-        step3Detail.put("candidatesBeforeRerank", candidates.size());
-        step3Detail.put("crossEncoderModel", "BGE-Reranker-v2-m3");
-        step3Detail.put("afterCrossEncoder", results.size());
-        step3Detail.put("mmrEnabled", true);
-        step3Detail.put("mmrLambda", 0.7);
-
-        if (!results.isEmpty()) {
-            double topScore = results.stream().mapToDouble(d -> {
-                Object s = d.getMetadata().get("score");
-                return s instanceof Number ? ((Number) s).doubleValue() : 0;
-            }).max().orElse(0);
-            step3Detail.put("topRerankScore", String.format("%.4f", topScore));
-        }
-
-        for (int i = 0; i < Math.min(results.size(), rerankResult.scores().size()); i++) {
-            results.get(i).getMetadata().put("score", rerankResult.scores().get(i).score());
-        }
-
-        long step3Ms = System.currentTimeMillis() - t3;
-        steps.add(new PipelineStep(3, "重排序", "📊", step3Ms,
-                results.isEmpty() ? "empty" : "success",
-                "Cross-Encoder + MMR → " + candidates.size() + "→" + results.size() + " 条",
-                step3Detail));
-
-        // ====== Step 4: 阈值过滤 ======
-        long t4 = System.currentTimeMillis();
-        Map<String, Object> step4Detail = new LinkedHashMap<>();
-        double threshold = 0.2;
-        step4Detail.put("threshold", threshold);
-
-        List<Document> filteredResults = results.stream()
-                .filter(d -> {
-                    Object s = d.getMetadata().get("score");
-                    return s instanceof Number && ((Number) s).doubleValue() >= threshold;
-                })
-                .collect(Collectors.toList());
-
-        step4Detail.put("beforeFilter", results.size());
-        step4Detail.put("afterFilter", filteredResults.size());
-        step4Detail.put("removedCount", results.size() - filteredResults.size());
-
-        if (filteredResults.isEmpty() && !results.isEmpty()) {
-            filteredResults = List.of(results.get(0));
-            step4Detail.put("fallback", "全部低于阈值，保留最高分兜底");
-        }
-
-        long step4Ms = System.currentTimeMillis() - t4;
-        steps.add(new PipelineStep(4, "阈值过滤", "✂️", step4Ms,
-                filteredResults.size() < results.size() ? "filtered" : "success",
-                "阈值 " + threshold + " → " + results.size() + "→" + filteredResults.size() + " 条",
-                step4Detail));
-
-        // ====== Step 5: 上下文构建 ======
-        long t5 = System.currentTimeMillis();
-        Map<String, Object> step5Detail = new LinkedHashMap<>();
-
-        String context = ragSearchService.formatContext(filteredResults);
-        List<Map<String, Object>> traces = ragSearchService.buildTraces(filteredResults);
-
-        step5Detail.put("lostInMiddle", true);
-        step5Detail.put("contentDedupApplied", true);
-        step5Detail.put("uniqueDocuments", traces.stream().map(t -> (String) t.get("documentName")).distinct().count());
-        step5Detail.put("contextLength", context.length());
-
-        long step5Ms = System.currentTimeMillis() - t5;
-        steps.add(new PipelineStep(5, "上下文构建", "📝", step5Ms,
-                "success",
-                "Lost-in-Middle + 去重 → " + traces.size() + " 段，共 " + context.length() + " 字符",
-                step5Detail));
-
-        long totalMs = System.currentTimeMillis() - totalStart;
-        return new DebugResult(query, totalMs, steps, traces, context, traces.size());
-    }
-
-    private String describeIntent(QueryProcessor.QueryIntent intent) {
-        return switch (intent) {
-            case SHORT_KEYWORD -> "短关键词（≤15字或含模糊指代），触发改写";
-            case FACTUAL -> "事实查询，直接检索";
-            case REASONING -> "推理/分析查询，直接检索";
-            case COMPARATIVE -> "对比查询，拆解子查询";
-        };
+        return new DebugResult(query, now() - totalStart, steps, traces, ctxt, traces.size());
     }
 }
