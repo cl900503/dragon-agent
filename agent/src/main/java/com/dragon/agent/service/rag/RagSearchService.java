@@ -152,9 +152,9 @@ public class RagSearchService {
             }
 
             double topScore = filteredResults.stream()
-                    .mapToDouble(d -> d.getScore() != null ? d.getScore() : 0).max().orElse(0);
+                    .mapToDouble(RagSearchService::getDocScore).max().orElse(0);
             double avgScore = filteredResults.stream()
-                    .mapToDouble(d -> d.getScore() != null ? d.getScore() : 0).average().orElse(0);
+                    .mapToDouble(RagSearchService::getDocScore).average().orElse(0);
             int hitCount = filteredResults.size();
             try {
                 searchLogRepository.save(new com.dragon.agent.entity.RagSearchLog(
@@ -203,7 +203,7 @@ public class RagSearchService {
             Object score = doc.getMetadata().get("score");
             trace.put("score", score instanceof Number
                     ? ((Number) score).doubleValue()
-                    : doc.getScore() != null ? doc.getScore() : 0.0);
+                    : 0.0);
             trace.put("contentSnippet", doc.getText());
             traces.add(trace);
         }
@@ -226,7 +226,7 @@ public class RagSearchService {
         for (int i = 0; i < reordered.size(); i++) {
             Document doc = reordered.get(i);
             String name = safeGetString(doc.getMetadata(), "originalName", "未知文档");
-            double score = doc.getScore() != null ? doc.getScore() : 0.0;
+            double score = getDocScore(doc);
             int pct = (int) Math.round(score * 100);
             String chunkIdx = safeGetString(doc.getMetadata(), "chunkIndex", "0");
 
@@ -279,6 +279,16 @@ public class RagSearchService {
         } catch (Exception e) {
             return Integer.toHexString(content.hashCode());
         }
+    }
+
+    /**
+     * 从 Document 中提取分数——优先 metadata["score"]，其次 getScore()，兜底 0。
+     */
+    static double getDocScore(Document doc) {
+        Object ms = doc.getMetadata().get("score");
+        if (ms instanceof Number n) return n.doubleValue();
+        Double ds = doc.getScore();
+        return ds != null ? ds : 0.0;
     }
 
     /**

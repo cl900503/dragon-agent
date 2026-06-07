@@ -153,27 +153,29 @@ public class QueryProcessor {
         }
 
         try {
-            ChatClient client = chatClientBuilder.build();
-            String response = client.prompt()
-                    .user("""
-                            你是一个查询改写助手。你的任务是将用户的简短或口语化查询改写为更精确、更适合文档检索的查询。
+            // LLM 调用设置 5 秒超时，避免阻塞主检索流程
+            var future = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+                ChatClient client = chatClientBuilder.build();
+                return client.prompt()
+                        .user("""
+                                你是一个查询改写助手。将用户简短/口语化查询改写为更精确的检索查询。
 
-                            ## 改写规则
-                            1. 展开缩写和简称（如"Q2"→"第二季度"）
-                            2. 补充缺失的上下文（将模糊指代替换为具体描述）
-                            3. 保持原意不变，不要添加额外信息
-                            4. 如果原查询已经很清晰，原样返回
+                                ## 规则
+                                1. 展开缩写简称  2. 补充上下文  3. 保持原意
+                                4. 如果已经清晰，原样返回
 
-                            ## 输出格式（严格遵循）
-                            每行一个查询变体，最多 3 行，不要编号、不要解释：
+                                ## 输出格式
+                                每行一个变体，最多 3 行，不要编号和解释：
 
-                            ## 用户查询
-                            %s
+                                ## 用户查询
+                                %s
 
-                            ## 改写结果
-                            """.formatted(query))
-                    .call()
-                    .content();
+                                ## 改写结果
+                                """.formatted(query))
+                        .call()
+                        .content();
+            });
+            String response = future.get(5, java.util.concurrent.TimeUnit.SECONDS);
 
             if (response == null || response.isBlank()) {
                 return List.of(query);

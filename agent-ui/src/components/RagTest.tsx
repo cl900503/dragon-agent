@@ -1,5 +1,5 @@
 /**
- * RAG 检索调试面板——单条查询，展示完整检索链路的调试信息。
+ * RAG 管线调试面板——逐步展示 5 步检索管线的中间结果。
  *
  * @author 陈龙
  * @since 2026-06-02
@@ -8,6 +8,16 @@
 import React, { useState, useRef } from 'react'
 import './RagTest.css'
 
+interface DebugStep {
+  step: number
+  name: string
+  icon: string
+  durationMs: number
+  status: string        // "success" | "warning" | "error" | "empty" | "info"
+  summary: string
+  detail: Record<string, unknown>
+}
+
 interface TraceItem {
   documentName: string
   chunkIndex: number
@@ -15,14 +25,30 @@ interface TraceItem {
   contentSnippet: string
 }
 
+interface DebugResult {
+  query: string
+  totalMs: number
+  steps: DebugStep[]
+  finalTraces: TraceItem[]
+  finalContext: string
+  finalCount: number
+}
+
+const STATUS_TAG: Record<string, { label: string; cls: string }> = {
+  success:  { label: '成功', cls: 'rt-tag-ok' },
+  filtered: { label: '成功', cls: 'rt-tag-ok' },
+  warning:  { label: '超时', cls: 'rt-tag-warn' },
+  error:    { label: '失败', cls: 'rt-tag-err' },
+  empty:    { label: '无结果', cls: 'rt-tag-empty' },
+  info:     { label: '跳过', cls: 'rt-tag-info' },
+}
+
 export default function RagTest() {
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(false)
-  const [traces, setTraces] = useState<TraceItem[] | null>(null)
-  const [context, setContext] = useState<string | null>(null)
-  const [rawJson, setRawJson] = useState<string | null>(null)
-  const [elapsed, setElapsed] = useState<number | null>(null)
+  const [result, setResult] = useState<DebugResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState<Set<number>>(new Set())
   const [expandedChunks, setExpandedChunks] = useState<Set<number>>(new Set())
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -31,35 +57,33 @@ export default function RagTest() {
     if (!q) return
     setLoading(true)
     setError(null)
-    setTraces(null)
-    setContext(null)
-    setRawJson(null)
-    setElapsed(null)
+    setResult(null)
 
-    const start = performance.now()
     try {
-      const res = await fetch('/api/documents/test-retrieval', {
+      const res = await fetch('/api/rag/debug', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: q }),
       })
       const data = await res.json()
-      const ms = performance.now() - start
-
       if (!res.ok) {
         setError(data.error || `HTTP ${res.status}`)
         return
       }
-
-      setTraces(data.traces || [])
-      setContext(data.context || null)
-      setRawJson(JSON.stringify(data, null, 2))
-      setElapsed(ms)
+      setResult(data)
     } catch (e) {
       setError(e instanceof Error ? e.message : '请求失败')
     } finally {
       setLoading(false)
     }
+  }
+
+  const toggleStep = (i: number) => {
+    setExpanded(prev => {
+      const next = new Set(prev)
+      next.has(i) ? next.delete(i) : next.add(i)
+      return next
+    })
   }
 
   const toggleChunk = (i: number) => {
@@ -70,7 +94,7 @@ export default function RagTest() {
     })
   }
 
-  const maxScore = traces && traces.length > 0 ? Math.max(...traces.map(t => t.score)) : 0
+  const maxScore = result ? Math.max(...result.finalTraces.map(t => t.score), 0) : 0
 
   return (
     <div className="ragtest-page">
@@ -84,7 +108,7 @@ export default function RagTest() {
           value={query}
           onChange={e => setQuery(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && search()}
-          placeholder="输入查询文本，测试 Milvus + BGE-M3 检索效果..."
+          placeholder="输入查询文本，查看完整 RAG 管线执行过程..."
           autoFocus
         />
         <button className="rt-search-btn" onClick={search} disabled={loading || !query.trim()}>
@@ -94,84 +118,124 @@ export default function RagTest() {
 
       {error && <div className="rt-error">{error}</div>}
 
-      {/* 结果概览 */}
-      {traces !== null && (
-        <div className="rt-summary">
-          <span className={`rt-badge ${traces.length > 0 ? 'rt-hit' : 'rt-miss'}`}>
-            {traces.length > 0 ? `命中 ${traces.length} 个 chunk` : '未命中'}
-          </span>
-          {elapsed !== null && (
-            <span className="rt-elapsed">{elapsed.toFixed(0)}ms</span>
+      {/* 管线可视化 */}
+      {result && (
+        <div className="rt-pipeline">
+          {/* 总耗时 */}
+          <div className="rt-total-bar">
+            <span className="rt-total-label">查询: "{result.query}"</span>
+            <span className="rt-total-ms">总耗时 {result.totalMs}ms</span>
+          </div>
+
+          {/* 步骤列表 */}
+          <div className="rt-steps">
+            {result.steps.map((s, i) => (
+              <div key={i} className="rt-step-wrap">
+                {/* 连接线 */}
+                {i < result.steps.length - 1 && (
+                  <div className={`rt-connector ${s.status === 'error' || s.status === 'empty' ? 'rt-conn-dim' : ''}`} />
+                )}
+
+                {/* 步骤卡片 */}
+                <div
+                  className={`rt-step-card ${s.status === 'error' ? 'rt-step-err' : s.status === 'warning' ? 'rt-step-warn' : s.status === 'empty' ? 'rt-step-empty' : ''}`}
+                  onClick={() => toggleStep(i)}
+                >
+                  <div className="rt-step-header">
+                    <span className="rt-step-num">{s.step}</span>
+                    <span className="rt-step-icon">{s.icon}</span>
+                    <span className="rt-step-name">{s.name}</span>
+                    <span className={`rt-step-status-tag ${STATUS_TAG[s.status]?.cls || ''}`}>
+                      {STATUS_TAG[s.status]?.label || s.status}
+                    </span>
+                    <span className="rt-step-summary">{s.summary}</span>
+                    <span className="rt-step-ms">{s.durationMs}ms</span>
+                    <span className="rt-step-toggle">{expanded.has(i) ? '▲' : '▼'}</span>
+                  </div>
+
+                  {/* 展开详情 */}
+                  {expanded.has(i) && (
+                    <div className="rt-step-detail">
+                      {Object.entries(s.detail).map(([k, v]) => (
+                        <div key={k} className="rt-detail-row">
+                          <span className="rt-detail-key">{k}</span>
+                          <span className="rt-detail-val">
+                            {Array.isArray(v)
+                              ? v.join(', ')
+                              : typeof v === 'boolean'
+                                ? v ? '是' : '否'
+                                : String(v)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* 检索结果 */}
+          {result.finalTraces.length > 0 && (
+            <section className="rt-section">
+              <h3>
+                📋 检索结果
+                <span className="rt-section-badge">{result.finalCount} 段</span>
+              </h3>
+              <div className="rt-chunks">
+                {result.finalTraces.map((t, i) => (
+                  <div key={i} className={`rt-chunk ${t.score === maxScore ? 'rt-chunk-top' : ''}`}>
+                    <div className="rt-chunk-header" onClick={() => toggleChunk(i)}>
+                      <span className="rt-chunk-num">#{i + 1}</span>
+                      <span className="rt-chunk-doc">{t.documentName}</span>
+                      <span className="rt-chunk-idx">chunk {t.chunkIndex}</span>
+                      <span className={`rt-score ${t.score > 0.5 ? 'rt-score-hi' : t.score > 0.2 ? 'rt-score-md' : 'rt-score-lo'}`}>
+                        {(t.score * 100).toFixed(1)}%
+                      </span>
+                      <span className="rt-chunk-toggle">{expandedChunks.has(i) ? '▲' : '▼'}</span>
+                    </div>
+                    {expandedChunks.has(i) && (
+                      <div className="rt-chunk-body">
+                        <pre className="rt-chunk-text">{t.contentSnippet}</pre>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* LLM 上下文 */}
+          {result.finalContext && (
+            <section className="rt-section">
+              <h3>📄 发送给 LLM 的上下文</h3>
+              <pre className="rt-context">{result.finalContext}</pre>
+            </section>
           )}
         </div>
       )}
 
-      {/* 分数分布 */}
-      {traces && traces.length > 0 && (
-        <div className="rt-score-bar">
-          {traces.map((t, i) => (
-            <div
-              key={i}
-              className="rt-score-seg"
-              style={{
-                flex: t.score,
-                opacity: 0.3 + (t.score / maxScore) * 0.7,
-              }}
-              title={`#${i + 1} ${t.documentName} 相似度 ${(t.score * 100).toFixed(1)}%`}
-            />
-          ))}
-          <span className="rt-score-label">分数分布</span>
-        </div>
-      )}
-
-      {/* 检索结果列表 */}
-      {traces && traces.length > 0 && (
-        <section className="rt-section">
-          <h3>检索结果 ({traces.length} chunks)</h3>
-          <div className="rt-chunks">
-            {traces.map((t, i) => (
-              <div key={i} className={`rt-chunk ${t.score === maxScore ? 'rt-chunk-top' : ''}`}>
-                <div className="rt-chunk-header" onClick={() => toggleChunk(i)}>
-                  <span className="rt-chunk-num">#{i + 1}</span>
-                  <span className="rt-chunk-doc">{t.documentName}</span>
-                  <span className="rt-chunk-idx">chunk {t.chunkIndex}</span>
-                  <span className={`rt-score ${t.score > 0.5 ? 'rt-score-hi' : t.score > 0.2 ? 'rt-score-md' : 'rt-score-lo'}`}>
-                    相似度 {(t.score * 100).toFixed(1)}%
-                  </span>
-                  <span className="rt-chunk-toggle">{expandedChunks.has(i) ? '▲' : '▼'}</span>
-                </div>
-                {expandedChunks.has(i) && (
-                  <div className="rt-chunk-body">
-                    <div className="rt-chunk-meta">
-                      <span>文档: {t.documentName}</span>
-                      <span>chunk #{t.chunkIndex}</span>
-                      <span>相似度: {(t.score * 100).toFixed(1)}%</span>
-                    </div>
-                    <pre className="rt-chunk-text">{t.contentSnippet}</pre>
-                  </div>
-                )}
+      {/* 空状态 */}
+      {!result && !loading && !error && (
+        <div className="rt-empty-state">
+          <div className="rt-empty-icon">🔍</div>
+          <p>输入查询文本，查看 RAG 检索管线的完整执行过程</p>
+          <div className="rt-preview-pipeline">
+            {[
+              { icon: '🔄', name: '查询改写', desc: '意图分类 + LLM 改写变体' },
+              { icon: '🔎', name: '多路检索', desc: 'Dense + Sparse + BM25 → RRF 融合' },
+              { icon: '📊', name: '重排序', desc: 'Cross-Encoder + MMR 多样性去重' },
+              { icon: '✂️', name: '阈值过滤', desc: '相似度阈值过滤低分文档' },
+              { icon: '📝', name: '上下文构建', desc: 'Lost-in-Middle 重排 + 结构化引用' },
+            ].map((s, i) => (
+              <div key={i} className="rt-preview-step">
+                <span className="rt-preview-icon">{s.icon}</span>
+                <span className="rt-preview-name">{s.name}</span>
+                <span className="rt-preview-desc">{s.desc}</span>
               </div>
             ))}
           </div>
-        </section>
-      )}
-
-      {/* LLM 上下文 */}
-      {context && (
-        <section className="rt-section">
-          <h3>发送给 LLM 的上下文</h3>
-          <pre className="rt-context">{context}</pre>
-        </section>
-      )}
-
-      {/* 原始 JSON */}
-      {rawJson && (
-        <section className="rt-section">
-          <details>
-            <summary className="rt-raw-toggle">原始 JSON 响应</summary>
-            <pre className="rt-raw">{rawJson}</pre>
-          </details>
-        </section>
+        </div>
       )}
     </div>
   )

@@ -89,7 +89,15 @@ python server.py
 │       ├── exception/             # 全局异常处理
 │       ├── repository/            # JPA 仓库
 │       ├── service/               # 业务服务
-│       │   ├── rag/               # RAG 基础设施（BgeM3Client, HybridSearchService, RerankService 等）
+│       │   ├── rag/               # RAG 基础设施
+│       │   │   ├── BgeM3Client.java           # 本地 BGE-M3 Embedding 客户端
+│       │   │   ├── HybridSearchService.java   # Dense+Sparse+BM25 三路混合检索 + RRF 融合
+│       │   │   ├── RagSearchService.java      # RAG 检索主流程（阈值过滤、Lost-in-Middle、内容去重）
+│       │   │   ├── RerankService.java         # BGE-Reranker Cross-Encoder + MMR 多样性重排
+│       │   │   ├── ChunkingService.java       # TokenTextSplitter + 滑动窗口 Overlap 分块
+│       │   │   ├── SemanticChunker.java       # 语义结构感知分段（Markdown/段落边界自适应）
+│       │   │   ├── QueryProcessor.java        # 查询意图分类 + LLM 改写 + 多路 RRF 融合
+│       │   │   └── QueryCacheService.java     # Embedding + 检索结果二级缓存
 │       │   ├── storage/           # MinIO 文件存储
 │       │   └── parser/            # Tika 文档解析
 │       └── support/               # SecurityHelper
@@ -187,6 +195,53 @@ python server.py
 | GET | /api/rag/feedback/batch | 批量查询反馈状态 |
 | GET | /api/rag/stats | 30 天统计（用户隔离） |
 | GET | /api/rag/recent | 最近检索记录（用户隔离） |
+| POST | /api/rag/debug | RAG 管线调试（逐步展示 5 步中间结果） |
+| POST | /api/documents/test-retrieval | 语义检索调试（旧版，已不推荐） |
+
+## RAG 检索管线
+
+用户查询经过 5 步管线到达 LLM：
+
+```
+用户Query → ①查询改写 → ②多路检索 → ③重排序 → ④阈值过滤 → ⑤上下文构建 → LLM生成
+```
+
+| 步骤 | 组件 | 耗时(参考) | 说明 |
+|------|------|-----------|------|
+| 查询改写 | `QueryProcessor` | LLM 调用 <5s 超时 | 意图分类，短查询/模糊查询触发 LLM 改写 |
+| 多路检索 | `HybridSearchService` | ~400ms | Dense(BGE-M3) + Sparse + BM25 → RRF 融合 |
+| 重排序 | `RerankService` | ~2000ms | BGE-Reranker Cross-Encoder + MMR 多样性去重 |
+| 阈值过滤 | `RagSearchService` | <1ms | 过滤 score < `similarity-threshold`(0.2) 的文档 |
+| 上下文构建 | `RagSearchService` | <5ms | Lost-in-Middle 重排 + 结构化引用 `[N] 文档名` |
+
+前端 `语义检索调试` 页面可逐步骤查看中间结果。API 端点：`POST /api/rag/debug`。
+
+### 查询改写触发条件
+
+| 查询类型 | 字数 | 是否触发改写 |
+|----------|------|-------------|
+| SHORT_KEYWORD | ≤15 字或含"这个/上次/之前"等模糊指代 | ✅ 触发 |
+| COMPARATIVE | 含"对比/区别/ vs "等 | ✅ 触发 |
+| FACTUAL | 16-80 字，无模糊指代 | ❌ 跳过 |
+| REASONING | >10 字，含"为什么/如何/分析" | ❌ 跳过 |
+
+改写基于 LLM，超 5 秒自动超时兜底使用原查询。
+
+## 分块策略
+
+上传的文档经过两级分块：
+
+1. **SemanticChunker**：按文档结构（Markdown 标题、段落边界）做语义感知分段，根据文档类型自适应大小（PDF 长文 1024 token、短文本 256 token）
+2. **ChunkingService**：TokenTextSplitter 按 token 数切分（默认 512 token），相邻块滑动窗口重叠 50 token
+
+配置项：
+```yaml
+app.rag:
+  chunk-size: 512          # 分块 token 数
+  chunk-overlap: 50        # 重叠 token 数
+  semantic-chunking: true  # 语义分块开关
+  similarity-threshold: 0.2  # 相似度阈值
+```
 
 ## 环境变量
 
@@ -200,6 +255,9 @@ python server.py
 | CORS_ORIGINS | 跨域域名 | http://localhost:5173 |
 | MILVUS_USERNAME | Milvus 用户名 | root |
 | MILVUS_PASSWORD | Milvus 密码 | Milvus |
+| app.rerank.mmr-lambda | MMR 多样性参数 | 0.7 |
+| app.cache.embedding.ttl-minutes | Embedding 缓存 TTL | 30 |
+| app.cache.search.ttl-minutes | 检索结果缓存 TTL | 5 |
 
 ## 数据库表
 
@@ -214,7 +272,8 @@ python server.py
 | reasoning_traces | 推理追溯 |
 | retrieval_traces | 检索追溯 |
 | rag_feedback | 检索反馈 |
-| rag_search_logs | 检索日志 |
+| rag_search_logs | 检索日志（每次检索记录 score/耗时/hit） |
+| tool_traces | 工具调用追溯（MCP/Function Calling 预留） |
 
 ## 安全配置
 
