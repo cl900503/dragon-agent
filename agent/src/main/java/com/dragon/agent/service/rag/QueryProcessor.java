@@ -160,16 +160,13 @@ public class QueryProcessor {
 
                 if (response != null && !response.isBlank()) {
                     List<String> variants = new ArrayList<>();
-                    variants.add(query);
                     for (String line : response.split("\n")) {
-                        String trimmed = line.replaceAll("^[\\d\\.\\-\\s]+", "").trim();
-                        if (!trimmed.isBlank() && !trimmed.equalsIgnoreCase(query) && variants.size() < 3) {
-                            variants.add(trimmed);
-                        }
+                        String trimmed = line.trim();
+                        if (!trimmed.isBlank() && variants.size() < 3) variants.add(trimmed);
                     }
                     log.debug("Query rewritten (V3): \"{}\" → {} variants in {}ms",
                             truncate(query, 30), variants.size(), 0);
-                    return variants;
+                    return variants.isEmpty() ? List.of(query) : variants;
                 }
             } catch (Exception e) {
                 log.warn("RewriteClient failed: {}", e.getMessage());

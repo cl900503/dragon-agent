@@ -52,20 +52,22 @@ export default function RagDashboard() {
       {recent.length > 0 && (
         <section className="rt-section">
           <h3>最近检索记录</h3>
-          <table className="rt-recent-table">
-            <thead><tr><th>查询</th><th>命中</th><th>结果</th><th>最高分</th><th>耗时</th></tr></thead>
-            <tbody>
-              {recent.map((r: any) => (
-                <tr key={r.id}>
-                  <td className="rt-recent-q" title={r.query}>{r.query?.slice(0, 50)}{r.query?.length > 50 ? '...' : ''}</td>
-                  <td>{r.hit ? '✅' : '❌'}</td>
-                  <td>{r.resultCount}</td>
-                  <td>{r.topScore?.toFixed(3)}</td>
-                  <td>{r.durationMs}ms</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="rt-recent-scroll">
+            <table className="rt-recent-table">
+              <thead><tr><th>查询</th><th>命中</th><th>结果</th><th>最高分</th><th>耗时</th></tr></thead>
+              <tbody>
+                {recent.map((r: any) => (
+                  <tr key={r.id}>
+                    <td className="rt-recent-q" title={r.query}>{r.query?.slice(0, 50)}{r.query?.length > 50 ? '...' : ''}</td>
+                    <td>{r.hit ? '✅' : '❌'}</td>
+                    <td>{r.resultCount}</td>
+                    <td>{r.topScore?.toFixed(3)}</td>
+                    <td>{r.durationMs}ms</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       )}
     </div>

@@ -262,7 +262,7 @@ export default function RagTest() {
                       <span className="rt-chunk-toggle">{expandedChunks.has(i) ? '▲' : '▼'}</span>
                     </div>
                     {expandedChunks.has(i) && (
-                      <div className="rt-chunk-body"><pre className="rt-content rt-content-scroll">{t.contentSnippet}</pre></div>
+                      <div className="rt-chunk-body"><pre className="rt-content">{t.contentSnippet}</pre></div>
                     )}
                   </div>
                 ))}
@@ -278,7 +278,7 @@ export default function RagTest() {
                 <span className="rt-output-title">发送给 LLM 的上下文</span>
                 <span className="rt-output-badge">{finalContext.length} 字符</span>
               </div>
-              <pre className="rt-content rt-content-tall">{finalContext}</pre>
+              <pre className="rt-content">{finalContext}</pre>
             </div>
           )}
         </div>

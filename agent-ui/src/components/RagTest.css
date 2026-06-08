@@ -171,8 +171,28 @@
 
 .rt-content {
   padding: 14px 16px; font-size: 13px; line-height: 1.8; color: #334155;
-  white-space: pre-wrap; word-break: break-word; overflow-y: auto;
+  white-space: pre-wrap; word-break: break-word;
 }
 .rt-chunk-body .rt-content { padding: 12px 14px; font-size: 13px; }
-.rt-content-scroll { max-height: 320px; }
-.rt-content-tall { max-height: 420px; }
+
+/* ===== Dashboard (RagDashboard) ===== */
+.rt-dashboard { padding: 8px 0; }
+.rt-section { margin-bottom: 20px; }
+.rt-section h3 { font-size: 13px; color: #64748b; font-weight: 600; margin: 0 0 10px; }
+.rt-stats-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px; margin-bottom: 20px;
+}
+.rt-stat-card {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 12px;
+  padding: 16px; text-align: center;
+}
+.rt-stat-val { font-size: 22px; font-weight: 700; color: #1e293b; }
+.rt-stat-lbl { font-size: 11px; color: #94a3b8; margin-top: 4px; }
+.rt-empty { color: #94a3b8; font-size: 13px; text-align: center; padding: 20px; }
+.rt-recent { margin-top: 16px; }
+.rt-recent-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.rt-recent-table th { text-align: left; padding: 6px 8px; color: #94a3b8; border-bottom: 1px solid #e2e8f0; font-weight: 600; position: sticky; top: 0; background: #fff; }
+.rt-recent-table td { padding: 6px 8px; color: #475569; border-bottom: 1px solid #f1f5f9; }
+.rt-recent-q { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rt-recent-scroll { max-height: 300px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 10px; }

@@ -51,12 +51,12 @@ public class RewriteClient {
         try {
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("model", model);
-            body.put("max_tokens", 60);
+            body.put("max_tokens", 120);
             body.put("temperature", 0.1);
             body.put("thinking", Map.of("type", "disabled"));
             body.put("messages", List.of(
                     Map.of("role", "user", "content",
-                            "改写用户查询为更适合检索的表述，每行一个变体，最多3行：" + query)));
+                            "你是企业知识库搜索优化器。\n\n任务：\n将用户问题改写为更适合知识库检索的查询。\n\n要求：\n1. 保持原意\n2. 补充合理的业务术语\n3. 不添加用户未提及的事实\n4. 不回答问题\n5. 输出三句检索查询（第一句是用户原问题）\n6. 分行输出就行，不要加编号\n\n用户问题：\n" + query)));
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
