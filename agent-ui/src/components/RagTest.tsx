@@ -90,26 +90,36 @@ export default function RagTest() {
     setFinalCount(0)
     setTotalMs(0)
 
-    fetch('/api/rag/debug', {
+    fetch('/api/rag/debug/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query: q }),
     }).then(async (res) => {
-      const data = await res.json()
-      if (!res.ok) { setError(data.error); setLoading(false); return }
+      const startData = await res.json()
+      if (!res.ok) { setError(startData.error); setLoading(false); return }
+      const sid = startData.sessionId
 
-      // 逐步动画：一个接一个渲染步骤
-      const allSteps = (data.steps || []) as DebugStep[]
-      for (let i = 0; i < allSteps.length; i++) {
-        setSteps(prev => [...prev, allSteps[i]])
-        await new Promise(r => setTimeout(r, 300))
+      let seen = 0
+      const poll = async () => {
+        const r = await fetch(`/api/rag/debug/poll?sid=${encodeURIComponent(sid)}`)
+        const d = await r.json()
+        if (d.error) { setError(d.error); setLoading(false); return }
+        const ns = (d.steps || []) as DebugStep[]
+        if (ns.length > seen) {
+          for (let i = seen; i < ns.length; i++) setSteps(prev => [...prev, ns[i]])
+          seen = ns.length
+        }
+        if (d.done) {
+          setFinalTraces(d.finalTraces || [])
+          setFinalContext(d.finalContext || '')
+          setFinalCount(d.finalCount || 0)
+          setTotalMs(d.totalMs || 0)
+          setLoading(false)
+        } else {
+          setTimeout(poll, 150)
+        }
       }
-
-      setFinalTraces(data.finalTraces || [])
-      setFinalContext(data.finalContext || '')
-      setFinalCount(data.finalCount || 0)
-      setTotalMs(data.totalMs || 0)
-      setLoading(false)
+      poll()
     }).catch(e => {
       setError(e instanceof Error ? e.message : '请求失败')
       setLoading(false)

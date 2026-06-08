@@ -38,7 +38,7 @@
 
 | 阶段 | 组件 | 说明 |
 |------|------|------|
-| 查询处理 | `QueryProcessor` | 意图分类 + LLM 改写（模糊/短查询触发）+ 多路 RRF 融合 |
+| 查询处理 | `QueryProcessor` + `RewriteClient` | 意图分类 + 独立轻量模型改写（`deepseek-v4-flash` 非思考模式） |
 | 文档分块 | `SemanticChunker` + `ChunkingService` | 语义结构感知分段 → TokenTextSplitter + 滑动窗口重叠 |
 | 混合检索 | `HybridSearchService` | Dense (BGE-M3) + Sparse (BGE-M3) + BM25 关键词三路召回，RRF 融合 |
 | 重排序 | `RerankService` | Cross-Encoder (BGE-Reranker-v2-m3) + MMR 多样性去重 |

@@ -91,13 +91,15 @@ python server.py
 │       ├── service/               # 业务服务
 │       │   ├── rag/               # RAG 基础设施
 │       │   │   ├── BgeM3Client.java           # 本地 BGE-M3 Embedding 客户端
+│       │   │   ├── RewriteClient.java          # 查询改写专用 LLM 客户端（独立轻量模型）
 │       │   │   ├── HybridSearchService.java   # Dense+Sparse+BM25 三路混合检索 + RRF 融合
 │       │   │   ├── RagSearchService.java      # RAG 检索主流程（阈值过滤、Lost-in-Middle、内容去重）
 │       │   │   ├── RerankService.java         # BGE-Reranker Cross-Encoder + MMR 多样性重排
 │       │   │   ├── ChunkingService.java       # TokenTextSplitter + 滑动窗口 Overlap 分块
 │       │   │   ├── SemanticChunker.java       # 语义结构感知分段（Markdown/段落边界自适应）
 │       │   │   ├── QueryProcessor.java        # 查询意图分类 + LLM 改写 + 多路 RRF 融合
-│       │   │   └── QueryCacheService.java     # Embedding + 检索结果二级缓存
+│       │   │   ├── QueryCacheService.java     # Embedding + 检索结果二级缓存
+│       │   │   └── RagDebugService.java       # 管线调试服务（分步执行 + 轮询式逐步展示）
 │       │   ├── storage/           # MinIO 文件存储
 │       │   └── parser/            # Tika 文档解析
 │       └── support/               # SecurityHelper
@@ -195,8 +197,9 @@ python server.py
 | GET | /api/rag/feedback/batch | 批量查询反馈状态 |
 | GET | /api/rag/stats | 30 天统计（用户隔离） |
 | GET | /api/rag/recent | 最近检索记录（用户隔离） |
-| POST | /api/rag/debug | RAG 管线调试（逐步展示 5 步中间结果） |
-| POST | /api/documents/test-retrieval | 语义检索调试（旧版，已不推荐） |
+| POST | /api/rag/debug | RAG 管线调试（一次性返回全部步骤） |
+| POST | /api/rag/debug/start | 启动分步调试卷（返回 sessionId） |
+| GET | /api/rag/debug/poll?sid= | 轮询调试卷进度（每步完成即时可见） |
 
 ## RAG 检索管线
 
@@ -208,13 +211,22 @@ python server.py
 
 | 步骤 | 组件 | 耗时(参考) | 说明 |
 |------|------|-----------|------|
-| 查询改写 | `QueryProcessor` | LLM 调用 <5s 超时 | 意图分类，短查询/模糊查询触发 LLM 改写 |
-| 多路检索 | `HybridSearchService` | ~400ms | Dense(BGE-M3) + Sparse + BM25 → RRF 融合 |
+| 查询改写 | `QueryProcessor` + `RewriteClient` | ~1.3s | 意图分类，短查询/模糊查询触发 LLM 改写（独立 `deepseek-v4-flash` 非思考模式） |
+| 多路检索 | `HybridSearchService` | ~300ms | Dense(BGE-M3) + Sparse + BM25 → RRF 融合 |
 | 重排序 | `RerankService` | ~2000ms | BGE-Reranker Cross-Encoder + MMR 多样性去重 |
 | 阈值过滤 | `RagSearchService` | <1ms | 过滤 score < `similarity-threshold`(0.2) 的文档 |
-| 上下文构建 | `RagSearchService` | <5ms | Lost-in-Middle 重排 + 结构化引用 `[N] 文档名` |
+| 上下文构建 | `RagSearchService` | <5ms | Lost-in-Middle 重排 + 结构化引用 `[N] 文档名 (相关度: XX%)` |
 
-前端 `语义检索调试` 页面可逐步骤查看中间结果。API 端点：`POST /api/rag/debug`。
+前端 `语义检索调试` 页面可逐步骤查看中间结果，使用轮询模式实时展示每步耗时。
+
+### 查询改写
+
+改写使用独立的轻量模型（`RewriteClient` 直调 DeepSeek API），不占用对话推理模型：
+
+- 模型：`deepseek-v4-flash`（可配置 `app.rag.rewrite-model`）
+- 思考模式：已关闭（`thinking: disabled`）
+- 超时：5 秒超时 + 3 秒 API 超时
+- 降级：`RewriteClient` 不可用时回退到 `ChatClient`
 
 ### 查询改写触发条件
 
@@ -224,8 +236,6 @@ python server.py
 | COMPARATIVE | 含"对比/区别/ vs "等 | ✅ 触发 |
 | FACTUAL | 16-80 字，无模糊指代 | ❌ 跳过 |
 | REASONING | >10 字，含"为什么/如何/分析" | ❌ 跳过 |
-
-改写基于 LLM，超 5 秒自动超时兜底使用原查询。
 
 ## 分块策略
 
@@ -237,10 +247,12 @@ python server.py
 配置项：
 ```yaml
 app.rag:
-  chunk-size: 512          # 分块 token 数
-  chunk-overlap: 50        # 重叠 token 数
-  semantic-chunking: true  # 语义分块开关
-  similarity-threshold: 0.2  # 相似度阈值
+  chunk-size: 512              # 分块 token 数
+  chunk-overlap: 50            # 重叠 token 数
+  semantic-chunking: true      # 语义分块开关
+  similarity-threshold: 0.2    # 相似度阈值
+  rewrite-model: deepseek-v4-flash  # 改写专用模型
+  search-limit: 20             # 检索候选数上限
 ```
 
 ## 环境变量
@@ -255,7 +267,9 @@ app.rag:
 | CORS_ORIGINS | 跨域域名 | http://localhost:5173 |
 | MILVUS_USERNAME | Milvus 用户名 | root |
 | MILVUS_PASSWORD | Milvus 密码 | Milvus |
+| app.rag.rewrite-model | 查询改写模型 | deepseek-v4-flash |
 | app.rerank.mmr-lambda | MMR 多样性参数 | 0.7 |
+| app.rerank.mmr-enabled | MMR 去重开关 | true |
 | app.cache.embedding.ttl-minutes | Embedding 缓存 TTL | 30 |
 | app.cache.search.ttl-minutes | 检索结果缓存 TTL | 5 |
 
