@@ -203,21 +203,20 @@ python server.py
 
 ## RAG 检索管线
 
-用户查询经过 5 步管线到达 LLM：
-
 ```
-用户Query → ①查询改写 → ②多路检索 → ③重排序 → ④阈值过滤 → ⑤上下文构建 → LLM生成
+用户Query → ①查询改写 → ②多路检索 → ③MMR去重 → ④Cross-Encoder精排 → ⑤阈值过滤 → ⑥上下文构建 → LLM生成
 ```
 
 | 步骤 | 组件 | 耗时(参考) | 说明 |
 |------|------|-----------|------|
-| 查询改写 | `QueryProcessor` + `RewriteClient` | ~1.3s | 意图分类，短查询/模糊查询触发 LLM 改写（独立 `deepseek-v4-flash` 非思考模式） |
-| 多路检索 | `HybridSearchService` | ~300ms | Dense(BGE-M3) + Sparse + BM25 → RRF 融合 |
-| 重排序 | `RerankService` | ~2000ms | BGE-Reranker Cross-Encoder + MMR 多样性去重 |
-| 阈值过滤 | `RagSearchService` | <1ms | 过滤 score < `similarity-threshold`(0.2) 的文档 |
-| 上下文构建 | `RagSearchService` | <5ms | Lost-in-Middle 重排 + 结构化引用 `[N] 文档名 (相关度: XX%)` |
+| 查询改写 | `QueryProcessor` + `RewriteClient` | ~1.3s | 意图分类，短查询/模糊查询触发 LLM 改写 |
+| 多路检索 | `HybridSearchService` | ~300ms | Dense(BGE-M3) + Sparse + BM25(`bm25_vector`) → RRF 融合 |
+| 去重 | `RerankService` | <1ms | MMR (λ=0.7, Jaccard 3-gram) 缩小候选集 |
+| 精排 | `RerankService` | ~600ms | Cross-Encoder(BGE-Reranker) 对去重后的候选精排 |
+| 阈值过滤 | `RagSearchService` | <1ms | 过滤 score < `similarity-threshold`(0.2) |
+| 上下文构建 | `RagPipelineService` | <5ms | Lost-in-Middle 重排 + 结构化引用 |
 
-前端 `语义检索调试` 页面可逐步骤查看中间结果，使用轮询模式实时展示每步耗时。
+**统一管线**：`RagPipelineService` 是会话和调试的**唯一入口**，确保两端结果一致。调试页通过 polling 逐步骤展示中间数据，会话只取最终结果。
 
 ### 查询改写
 
@@ -225,8 +224,7 @@ python server.py
 
 - 模型：`deepseek-v4-flash`（可配置 `app.rag.rewrite-model`）
 - 思考模式：已关闭（`thinking: disabled`）
-- 超时：5 秒超时 + 3 秒 API 超时
-- 降级：`RewriteClient` 不可用时回退到 `ChatClient`
+- 超时：`HttpURLConnection` 直连，connect=3s + read=5s
 
 ### 查询改写触发条件
 

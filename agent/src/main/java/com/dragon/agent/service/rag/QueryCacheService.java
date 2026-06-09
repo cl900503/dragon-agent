@@ -1,6 +1,7 @@
 package com.dragon.agent.service.rag;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -52,9 +53,16 @@ public class QueryCacheService {
     @Value("${app.cache.search.ttl-minutes:5}")
     private int searchTtlMinutes;
 
+    @Value("${app.cache.rewrite.ttl-minutes:10}")
+    private int rewriteTtlMinutes;
+
+    @Value("${app.cache.rewrite.max-size:200}")
+    private int rewriteMaxSize;
+
     // key → CacheEntry (LRU + TTL)
     private final ConcurrentHashMap<String, CacheEntry<Object>> embedCache = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, CacheEntry<Object>> searchCache = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, CacheEntry<Object>> rewriteCache = new ConcurrentHashMap<>();
 
     private final ScheduledExecutorService cleaner = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r, "cache-cleaner");
@@ -135,17 +143,36 @@ public class QueryCacheService {
         searchCache.put(key, new CacheEntry<>(result, searchTtlMinutes));
     }
 
+    // ==================== 改写结果缓存 ====================
+
+    @SuppressWarnings("unchecked")
+    public List<String> getRewriteResult(String query) {
+        String key = md5("rw:" + query);
+        CacheEntry<Object> entry = rewriteCache.get(key);
+        if (entry != null && !entry.isExpired()) {
+            log.debug("Rewrite cache hit for \"{}\"", truncate(query, 40));
+            return (List<String>) entry.value;
+        }
+        return null;
+    }
+
+    public void putRewriteResult(String query, List<String> variants) {
+        String key = md5("rw:" + query);
+        if (rewriteCache.size() >= rewriteMaxSize) {
+            evictLru(rewriteCache);
+        }
+        rewriteCache.put(key, new CacheEntry<>(variants, rewriteTtlMinutes));
+    }
+
     // ==================== 缓存维护 ====================
 
     /**
      * 清除所有缓存（用于文档更新后的缓存失效）。
      */
     public void invalidateAll() {
-        int embedSize = embedCache.size();
-        int searchSize = searchCache.size();
-        embedCache.clear();
-        searchCache.clear();
-        log.info("Cache invalidated: {} embeddings, {} searches", embedSize, searchSize);
+        int embedSize = embedCache.size(), searchSize = searchCache.size(), rewriteSize = rewriteCache.size();
+        embedCache.clear(); searchCache.clear(); rewriteCache.clear();
+        log.info("Cache invalidated: {} embeddings, {} searches, {} rewrites", embedSize, searchSize, rewriteSize);
     }
 
     /**
@@ -166,6 +193,7 @@ public class QueryCacheService {
     private void evictExpired() {
         evictExpired(embedCache, "embedding");
         evictExpired(searchCache, "search");
+        evictExpired(rewriteCache, "rewrite");
     }
 
     private void evictExpired(ConcurrentHashMap<String, CacheEntry<Object>> cache, String name) {

@@ -37,6 +37,10 @@ public class RerankService {
     @Value("${app.rerank.top-k:5}")
     private int rerankTopK;
 
+    /** Cross-Encoder 输出数量，作为 MMR 的输入 */
+    @Value("${app.rerank.ce-top-k:10}")
+    private int ceTopK;
+
     /** MMR 多样性参数（0=最大多样性, 1=最大相关性），推荐 0.7 */
     @Value("${app.rerank.mmr-lambda:0.7}")
     private double mmrLambda;
@@ -58,29 +62,41 @@ public class RerankService {
     public RerankResult rerank(String query, List<Document> docs) {
         if (docs.isEmpty()) return new RerankResult(docs, List.of());
 
-        // 阶段 1：Cross-Encoder 语义重排
-        List<Document> reranked;
-        List<RerankScore> scores;
-        var ceResult = crossEncoderRerank(query, docs);
-        reranked = ceResult.documents();
-        scores = ceResult.scores();
-        if (reranked.isEmpty()) return new RerankResult(reranked, scores);
-
-        // 阶段 2：MMR 多样性去重
-        if (mmrEnabled && reranked.size() > 1) {
-            var mmrResult = maximalMarginalRelevance(query, reranked, scores, mmrLambda, rerankTopK);
-            reranked = mmrResult.documents();
-            scores = mmrResult.scores();
+        // 候选 ≤ 3：跳过 Cross-Encoder，直接返回原始排序
+        if (docs.size() <= 3) {
+            List<RerankScore> scores = new ArrayList<>();
+            for (int i = 0; i < docs.size(); i++) {
+                Object s = docs.get(i).getMetadata().get("score");
+                double v = s instanceof Number ? ((Number) s).doubleValue() : 0;
+                scores.add(new RerankScore(i, v));
+            }
+            return new RerankResult(docs, scores);
         }
 
-        log.debug("Reranked {} docs → top {} (Cross-Encoder → MMR)", docs.size(), reranked.size());
-        return new RerankResult(reranked, scores);
+        // 阶段 1：MMR 多样性去重 → 缩小候选集
+        List<Document> candidates = docs;
+        List<RerankScore> preScores = new ArrayList<>();
+        for (int i = 0; i < docs.size(); i++) {
+            Object s = docs.get(i).getMetadata().get("score");
+            preScores.add(new RerankScore(i, s instanceof Number ? ((Number) s).doubleValue() : 0));
+        }
+
+        int mmrTop = Math.min(ceTopK * 3, docs.size()); // MMR 保留 CE 输入量的 3 倍
+        if (mmrEnabled && docs.size() > 1) {
+            var mmrResult = maximalMarginalRelevance(query, docs, preScores, mmrLambda, mmrTop);
+            candidates = mmrResult.documents();
+        }
+
+        // 阶段 2：Cross-Encoder 语义重排 → Top(rerankTopK)
+        var ceResult = crossEncoderRerank(query, candidates, rerankTopK);
+        log.debug("RRF→MMR({})→CE({})", candidates.size(), rerankTopK);
+        return ceResult;
     }
 
     /**
      * Cross-Encoder 语义重排——调用 BGE-Reranker 服务。
      */
-    RerankResult crossEncoderRerank(String query, List<Document> docs) {
+    RerankResult crossEncoderRerank(String query, List<Document> docs, int topK) {
         List<String> texts = docs.stream().map(Document::getText).collect(Collectors.toList());
         List<RerankScore> scores = new ArrayList<>();
 
@@ -105,7 +121,7 @@ public class RerankService {
                     scores.add(new RerankScore(idx, score));
                 }
                 scores.sort((a, b) -> Double.compare(b.score, a.score));
-                scores = scores.subList(0, Math.min(rerankTopK * 2, scores.size())); // 多取一些给 MMR 用
+                scores = scores.subList(0, Math.min(topK, scores.size()));
                 List<Document> reranked = scores.stream()
                         .map(s -> docs.get(s.index))
                         .collect(Collectors.toList());
@@ -115,7 +131,6 @@ public class RerankService {
             log.warn("Reranker unavailable: {}, falling back to original order", e.getMessage());
         }
 
-        // 降级：Reranker 不可用时用原始顺序
         return fallbackRerank(docs);
     }
 
@@ -196,12 +211,14 @@ public class RerankService {
         return new RerankResult(mmrDocs, mmrScores);
     }
 
-    /** Reranker 不可用时的降级策略：用原始排序结果 */
+    /** Reranker 不可用时的降级策略：保留原始分数，不做 Cross-Encoder 重排 */
     private RerankResult fallbackRerank(List<Document> docs) {
         List<Document> fallback = docs.subList(0, Math.min(rerankTopK, docs.size()));
         List<RerankScore> scores = new ArrayList<>();
         for (int i = 0; i < fallback.size(); i++) {
-            scores.add(new RerankScore(i, 1.0 - i * 0.05));
+            Object s = fallback.get(i).getMetadata().get("score");
+            double v = s instanceof Number ? ((Number) s).doubleValue() : 0;
+            scores.add(new RerankScore(i, v));
         }
         return new RerankResult(fallback, scores);
     }

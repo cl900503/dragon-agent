@@ -97,12 +97,13 @@ app:
     similarity-threshold: 0.2
     # 语义分块开关
     semantic-chunking: true
-    # 检索候选数
-    search-limit: 20
+    # 检索候选数（各路召回 Top100 → RRF → Top30，TEI 最大批量 32）
+    search-limit: 30
   # Reranker 参数
   rerank:
     base-url: http://localhost:8082
-    top-k: 5
+    top-k: 5          # 最终送入 LLM 的数量
+    ce-top-k: 10      # Cross-Encoder 输出数量（送入 MMR）
     # MMR 多样性重排
     mmr-enabled: true
     mmr-lambda: 0.7

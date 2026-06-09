@@ -337,7 +337,15 @@ public class DocumentService {
         log.info("Retrying document [{}]", entity.getOriginalName());
         try (InputStream storedStream = fileStorageService.read(entity.getStoredPath())) {
             Document parsedDoc = documentParserService.parse(storedStream, entity.getOriginalName(), entity.getMimeType());
-            List<Document> chunks = chunkingService.chunk(List.of(parsedDoc), defaultChunkSize, defaultChunkOverlap);
+
+            // 语义分块预处理——与上传路径保持一致
+            List<Document> chunkSources;
+            if (semanticChunker != null) {
+                List<Document> segs = semanticChunker.chunk(parsedDoc.getText(), entity.getMimeType(), entity.getOriginalName());
+                chunkSources = !segs.isEmpty() ? segs : List.of(parsedDoc);
+            } else { chunkSources = List.of(parsedDoc); }
+
+            List<Document> chunks = chunkingService.chunk(chunkSources, defaultChunkSize, defaultChunkOverlap);
             for (int i = 0; i < chunks.size(); i++) {
                 chunks.get(i).getMetadata().put("documentId", documentId);
                 chunks.get(i).getMetadata().put("originalName", entity.getOriginalName());
@@ -345,12 +353,23 @@ public class DocumentService {
                 chunks.get(i).getMetadata().put("userId", entity.getUserId().toString());
                 if (entity.getKbId() != null) chunks.get(i).getMetadata().put("kbId", entity.getKbId());
             }
-            if (vectorStore != null) {
-                try { hybridSearch.deleteByExpr("documentId == '" + documentId + "'"); } catch (Exception e) {
-                    log.warn("Retry cleanup old vectors failed: {}", e.getMessage());
-                }
-                try { vectorStore.add(chunks); } catch (Exception e) { log.warn("Retry index failed"); }
+            // 清除旧向量 + 写入新向量
+            try { hybridSearch.deleteByExpr("documentId == '" + documentId + "'"); } catch (Exception e) {
+                log.warn("Retry cleanup failed: {}", e.getMessage());
             }
+            List<Map<String, Object>> rows = new ArrayList<>();
+            for (int i = 0; i < chunks.size(); i++) {
+                var emb = bgeM3.embed(chunks.get(i).getText());
+                if (emb == null) continue;
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("dense_vector", emb.get("dense")); row.put("sparse_vector", emb.get("sparse"));
+                row.put("content", chunks.get(i).getText()); row.put("documentId", documentId);
+                row.put("originalName", entity.getOriginalName()); row.put("chunkIndex", String.valueOf(i));
+                row.put("userId", entity.getUserId().toString());
+                if (entity.getKbId() != null) row.put("kbId", entity.getKbId());
+                rows.add(row);
+            }
+            try { hybridSearch.insert(rows); } catch (Exception e) { log.warn("Retry index failed: {}", e.getMessage()); }
             entity.setChunkCount(chunks.size());
             entity.setStatus(DocumentStatus.READY);
             entity.setErrorMessage(null);

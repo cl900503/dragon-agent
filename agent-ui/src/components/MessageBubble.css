@@ -124,7 +124,7 @@
 .citation-chunk-meta { display: flex; align-items: center; gap: 10px; margin-bottom: 3px; }
 .citation-chunk-idx { font-size: 10px; color: #94a3b8; font-weight: 500; }
 .citation-chunk-score { font-size: 10px; color: #16a34a; font-weight: 600; background: #f0fdf4; padding: 1px 6px; border-radius: 4px; }
-.citation-chunk-text { font-size: 12px; color: #475569; line-height: 1.5; white-space: pre-wrap; word-break: break-word; max-height: 80px; overflow-y: auto; }
+.citation-chunk-text { font-size: 12px; color: #475569; line-height: 1.5; white-space: pre-wrap; word-break: break-word; max-height: 280px; overflow-y: auto; }
 
 /* 检索反馈 */
 .feedback-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding-top: 8px; border-top: 1px solid #f1f5f9; font-size: 12px; }

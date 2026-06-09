@@ -55,8 +55,13 @@ public class RagSearchService {
     @Value("${app.rag.search-limit:20}")
     private int searchLimit;
 
+    public int getSearchLimit() { return searchLimit; }
+
     @Value("${app.rag.similarity-threshold:0.2}")
     private double similarityThreshold;
+
+    @Value("${app.rag.max-context-chars:6000}")
+    private int maxContextChars;
 
     /**
      * RAG 语义检索——Embedding + Hybrid Search + Rerank 完整管线。
@@ -108,10 +113,8 @@ public class RagSearchService {
 
             @SuppressWarnings("unchecked")
             Map<String, Object> sparseVec = (Map<String, Object>) emb.get("sparse");
-            List<Map<String, Object>> raw = hybridSearch.hybridSearch(
-                    (List<Double>) emb.get("dense"), sparseVec, filter.toString(), searchLimit,
-                    query, // 原始查询文本 → 用于 BM25 关键词检索
-                    0.7f, 0.2f); // Dense 0.7 + Sparse 0.2 + BM25 0.1
+            List<Map<String, Object>> raw = hybridSearch.search(
+                    (List<Double>) emb.get("dense"), sparseVec, filter.toString(), searchLimit, query).fusedResults();
             long retrievalMs = System.currentTimeMillis() - start;
 
             if (raw.isEmpty()) {
@@ -219,8 +222,26 @@ public class RagSearchService {
     public String formatContext(List<Document> documents) {
         if (documents.isEmpty()) return "";
 
+        // 相邻 Chunk 合并：同一文档连续片段拼接，减少上下文碎片
+        List<Document> merged = mergeAdjacentChunks(documents);
+
+        // 上下文长度保护：估算 token 数（中文 ~1char/token，英文 ~3.5char/token，取 2char/token）
+        int maxChars = maxContextChars;
+        List<Document> docs = new ArrayList<>(merged);
+        // 按分数降序确保优先保留高分片段
+        docs.sort((a, b) -> Double.compare(getDocScore(b), getDocScore(a)));
+        int totalChars = docs.stream().mapToInt(d -> d.getText().length()).sum();
+        while (totalChars > maxChars && docs.size() > 1) {
+            Document removed = docs.remove(docs.size() - 1); // 去掉最低分
+            totalChars -= removed.getText().length();
+        }
+        if (docs.size() < merged.size()) {
+            log.debug("Context truncated: {} → {} chunks ({} → {} chars)", merged.size(), docs.size(),
+                    merged.stream().mapToInt(d -> d.getText().length()).sum(), totalChars);
+        }
+
         // Lost-in-Middle 重排：高分 → 头尾，中分 → 中间
-        List<Document> reordered = lostInMiddleReorder(documents);
+        List<Document> reordered = lostInMiddleReorder(docs);
 
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < reordered.size(); i++) {
@@ -299,6 +320,59 @@ public class RagSearchService {
         if (v == null) return defaultValue;
         if (v instanceof String s) return s;
         return v.toString();
+    }
+
+    /**
+     * 合并同一文档的相邻 chunk，减少 LLM 上下文碎片化。
+     */
+    List<Document> mergeAdjacentChunks(List<Document> docs) {
+        if (docs.size() <= 1) return docs;
+
+        // 按文档名分组，每组内按 chunkIndex 排序
+        Map<String, List<Document>> byDoc = new LinkedHashMap<>();
+        for (Document d : docs) {
+            String name = safeGetString(d.getMetadata(), "originalName", "unknown");
+            byDoc.computeIfAbsent(name, k -> new ArrayList<>()).add(d);
+        }
+
+        List<Document> merged = new ArrayList<>();
+        for (var group : byDoc.values()) {
+            group.sort((a, b) -> {
+                int ai = Integer.parseInt(safeGetString(a.getMetadata(), "chunkIndex", "0"));
+                int bi = Integer.parseInt(safeGetString(b.getMetadata(), "chunkIndex", "0"));
+                return Integer.compare(ai, bi);
+            });
+            // 合并相邻 chunk
+            List<Document> docMerged = new ArrayList<>();
+            Document prev = null;
+            for (Document curr : group) {
+                int ci = Integer.parseInt(safeGetString(curr.getMetadata(), "chunkIndex", "0"));
+                if (prev != null) {
+                    int pi = Integer.parseInt(safeGetString(prev.getMetadata(), "chunkIndex", "0"));
+                    if (ci == pi + 1) {
+                        // 相邻 → 合并到前一个，保留较高分
+                        String mergedText = prev.getText() + "\n" + curr.getText();
+                        double prevScore = getDocScore(prev), currScore = getDocScore(curr);
+                        prev.getMetadata().putAll(curr.getMetadata());
+                        prev.getMetadata().put("chunkIndex", pi + "-" + ci);
+                        prev.getMetadata().put("score", Math.max(prevScore, currScore));
+                        // 创建新 Document 替代 prev（因为 text 变了）
+                        docMerged.set(docMerged.size() - 1,
+                                new Document(mergedText, prev.getMetadata()));
+                        prev = docMerged.get(docMerged.size() - 1);
+                        continue;
+                    }
+                }
+                docMerged.add(curr);
+                prev = curr;
+            }
+            merged.addAll(docMerged);
+        }
+
+        if (merged.size() < docs.size()) {
+            log.debug("Chunk merge: {} → {} chunks", docs.size(), merged.size());
+        }
+        return merged;
     }
 
     /**

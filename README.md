@@ -30,21 +30,20 @@
 
 ## RAG 检索管线
 
-完整的 RAG 检索管线，从用户查询到 LLM 生成经历 6 个阶段：
-
 ```
-用户Query → ①查询改写 → ②多路检索 → ③重排序 → ④阈值过滤 → ⑤上下文构建 → ⑥LLM生成
+用户Query → ①查询改写 → ②多路检索 → ③MMR去重 → ④Cross-Encoder精排 → ⑤阈值过滤 → ⑥上下文构建 → LLM生成
 ```
 
 | 阶段 | 组件 | 说明 |
 |------|------|------|
 | 查询处理 | `QueryProcessor` + `RewriteClient` | 意图分类 + 独立轻量模型改写（`deepseek-v4-flash` 非思考模式） |
 | 文档分块 | `SemanticChunker` + `ChunkingService` | 语义结构感知分段 → TokenTextSplitter + 滑动窗口重叠 |
-| 混合检索 | `HybridSearchService` | Dense (BGE-M3) + Sparse (BGE-M3) + BM25 关键词三路召回，RRF 融合 |
-| 重排序 | `RerankService` | Cross-Encoder (BGE-Reranker-v2-m3) + MMR 多样性去重 |
-| 阈值过滤 | `RagSearchService` | 重排后按 `similarity-threshold` 过滤低分文档 |
-| 上下文构建 | `RagSearchService.formatContext` | Lost-in-Middle 重排 + 结构化引用格式 `[N] 文档名 (相关度: XX%)` |
-| 检索缓存 | `QueryCacheService` | Embedding 缓存 (30min) + 检索结果缓存 (5min)，文档变更时自动失效 |
+| 混合检索 | `HybridSearchService` | Dense(BGE-M3) + Sparse(BGE-M3) + BM25 三路召回，RRF 融合 |
+| 去重重排 | `RerankService` | MMR 多样性去重 → Cross-Encoder(BGE-Reranker) 精排 |
+| 阈值过滤 | `RagSearchService` | `similarity-threshold` 过滤低分文档 |
+| 上下文构建 | `RagPipelineService` | Lost-in-Middle 重排 + 结构化引用 `[N] 文档名 (相关度: XX%)` |
+| 统一管线 | `RagPipelineService` | 会话和调试共享同一入口，确保结果一致 |
+| 检索缓存 | `QueryCacheService` | Embedding 缓存(30min) + 改写缓存(10min) + 检索缓存(5min) |
 
 ## 快速开始
 

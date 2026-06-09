@@ -128,7 +128,7 @@ export function streamChat(
         } else if (type === 'done') {
           // 解析 done 事件：每行 "文件名|片段"
           if (data && data.trim()) {
-            doneDocs = data.split('\n').filter(Boolean)
+            doneDocs = data.split('\t').filter(Boolean)
           }
           safeDone()
         } else {

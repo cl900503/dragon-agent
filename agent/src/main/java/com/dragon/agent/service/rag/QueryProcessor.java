@@ -45,13 +45,17 @@ public class QueryProcessor {
     /** 模糊指代词列表 */
     private static final List<String> VAGUE_PRONOUNS = List.of(
             "这个", "那个", "这些", "那些", "它", "他", "她", "它们", "他们",
-            "上次", "之前", "上回", "那次", "上次那个", "前面那个");
+            "上次", "之前", "上回", "那次", "上次那个", "前面那个",
+            "怎么做", "怎么办", "怎么搞", "是什么", "啥意思", "什么意思");
 
     @Autowired(required = false)
     private ChatClient.Builder chatClientBuilder;
 
     @Autowired(required = false)
     private RewriteClient rewriteClient;
+
+    @Autowired(required = false)
+    private QueryCacheService cacheService;
 
     @Autowired
     private RagSearchService ragSearchService;
@@ -151,13 +155,16 @@ public class QueryProcessor {
      * </ul>
      */
     List<String> rewrite(String query) {
-        // 优先使用 RewriteClient（独立的轻量模型，不阻塞对话模型）
+        // 改写缓存——相同查询不重复调 LLM
+        if (cacheService != null) {
+            var cached = cacheService.getRewriteResult(query);
+            if (cached != null) return cached;
+        }
+
+        // RewriteClient 内置了 RestTemplate 超时（connect=3s, read=5s）
         if (rewriteClient != null) {
             try {
-                var future = java.util.concurrent.CompletableFuture.supplyAsync(
-                        () -> rewriteClient.rewrite(query));
-                String response = future.get(3, java.util.concurrent.TimeUnit.SECONDS);
-
+                String response = rewriteClient.rewrite(query);
                 if (response != null && !response.isBlank()) {
                     List<String> variants = new ArrayList<>();
                     for (String line : response.split("\n")) {
@@ -166,42 +173,13 @@ public class QueryProcessor {
                     }
                     log.debug("Query rewritten (V3): \"{}\" → {} variants in {}ms",
                             truncate(query, 30), variants.size(), 0);
+                    if (cacheService != null) cacheService.putRewriteResult(query, variants);
                     return variants.isEmpty() ? List.of(query) : variants;
                 }
             } catch (Exception e) {
                 log.warn("RewriteClient failed: {}", e.getMessage());
             }
             return List.of(query);
-        }
-
-        // 降级：使用 ChatClient（共享对话的推理模型）
-        if (chatClientBuilder != null) {
-            try {
-                var future = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
-                    ChatClient client = chatClientBuilder.build();
-                    return client.prompt()
-                            .user("改写用户查询为更精确的检索查询。每行一个变体，最多3行。\n\n用户查询：%s\n\n改写结果："
-                                    .formatted(query))
-                            .call()
-                            .content();
-                });
-                String response = future.get(5, java.util.concurrent.TimeUnit.SECONDS);
-
-                if (response != null && !response.isBlank()) {
-                    List<String> variants = new ArrayList<>();
-                    variants.add(query);
-                    for (String line : response.split("\n")) {
-                        String trimmed = line.replaceAll("^[\\d\\.\\-\\s]+", "").trim();
-                        if (!trimmed.isBlank() && !trimmed.equalsIgnoreCase(query) && variants.size() < 3) {
-                            variants.add(trimmed);
-                        }
-                    }
-                    log.debug("Query rewritten (fallback): \"{}\" → {} variants", truncate(query, 30), variants.size());
-                    return variants;
-                }
-            } catch (Exception e) {
-                log.warn("Query rewriting failed: {}", e.getMessage());
-            }
         }
 
         return List.of(query);

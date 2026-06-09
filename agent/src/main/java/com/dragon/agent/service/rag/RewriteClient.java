@@ -29,7 +29,6 @@ public class RewriteClient {
 
     private static final Logger log = LoggerFactory.getLogger(RewriteClient.class);
 
-    private final RestTemplate rest = new RestTemplate();
     private final ObjectMapper mapper = new ObjectMapper();
 
     @Value("${AI_API_KEY}")
@@ -58,12 +57,22 @@ public class RewriteClient {
                     Map.of("role", "user", "content",
                             "你是企业知识库搜索优化器。\n\n任务：\n将用户问题改写为更适合知识库检索的查询。\n\n要求：\n1. 保持原意\n2. 补充合理的业务术语\n3. 不添加用户未提及的事实\n4. 不回答问题\n5. 输出三句检索查询（第一句是用户原问题）\n6. 分行输出就行，不要加编号\n\n用户问题：\n" + query)));
 
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.setBearerAuth(apiKey);
-
-            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
-            String resp = rest.postForObject(baseUrl + "/v1/chat/completions", request, String.class);
+            String jsonBody = mapper.writeValueAsString(body);
+            java.net.URL url = new java.net.URL(baseUrl + "/v1/chat/completions");
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+            conn.setConnectTimeout(3000);
+            conn.setReadTimeout(5000);
+            conn.setRequestMethod("POST");
+            conn.setDoOutput(true);
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setRequestProperty("Authorization", "Bearer " + apiKey);
+            try (java.io.OutputStream os = conn.getOutputStream()) {
+                os.write(jsonBody.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            }
+            String resp;
+            try (java.io.InputStream is = conn.getInputStream()) {
+                resp = new String(is.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            }
 
             if (resp == null) return null;
             JsonNode root = mapper.readTree(resp);

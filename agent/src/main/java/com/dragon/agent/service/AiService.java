@@ -46,6 +46,9 @@ public class AiService {
     @Autowired(required = false)
     private com.dragon.agent.service.rag.QueryProcessor queryProcessor;
 
+    @Autowired(required = false)
+    private com.dragon.agent.service.rag.RagPipelineService pipelineService;
+
     @Autowired
     private ConversationService conversationService;
 
@@ -110,22 +113,21 @@ public class AiService {
         });
     }
 
-    /** 从知识库检索上下文，优先使用 QueryProcessor 进行查询改写和多路检索融合 */
+    /** 从知识库检索上下文——统一走 RagPipelineService，确保和调试页一致 */
     private RagSearchResult retrieveKnowledgeBase(String message, boolean enableRag, String username) {
-        if (!enableRag || documentService == null) {
-            return RagSearchResult.EMPTY;
-        }
+        if (!enableRag || documentService == null) return RagSearchResult.EMPTY;
         Long userId = userRepository.findByUsername(username).map(u -> u.getId()).orElse(null);
-        if (userId == null) {
-            return RagSearchResult.EMPTY;
-        }
+        if (userId == null) return RagSearchResult.EMPTY;
 
-        // 优先使用 QueryProcessor（查询改写 + 多路检索融合），不可用时降级为直接检索
+        if (pipelineService != null) {
+            var result = pipelineService.execute(message, userId);
+            return new RagSearchResult(result.context(), result.traces());
+        }
+        // 降级
         if (queryProcessor != null) {
             var result = queryProcessor.process(message, userId);
             return new RagSearchResult(result.context(), result.traces());
         }
-
         return documentService.retrieveContext(message, userId);
     }
 
@@ -152,14 +154,14 @@ public class AiService {
         return rag.traces().stream()
                 .map(t -> {
                     String name = (String) t.getOrDefault("documentName", "未知");
-                    String snippet = ((String) t.getOrDefault("contentSnippet", "")).replace("\n", " ").replace("\r", " ");
+                    String snippet = (String) t.getOrDefault("contentSnippet", "");
                     Object score = t.get("score");
                     Object chunkIdx = t.get("chunkIndex");
                     String scoreStr = score != null ? String.format("%.4f", (Double) score) : "";
                     String idxStr = chunkIdx != null ? chunkIdx.toString() : "";
                     return name + "|" + idxStr + "|" + scoreStr + "|" + snippet;
                 })
-                .reduce((a, b) -> a + "\n" + b).orElse("");
+                .reduce((a, b) -> a + "\t" + b).orElse("");
     }
 
     /** 从 AssistantMessage 中提取 DeepSeek 推理内容 */
