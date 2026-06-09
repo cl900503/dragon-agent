@@ -52,7 +52,11 @@ public class HybridSearchService {
     private String milvusPassword;
 
     /** RRF 平滑因子 */
-    private static final int RRF_K = 60;
+    static final int RRF_K = 60;
+
+    /** 包内可见：供管线调试输出读取实际参数 */
+    int getRrfK() { return RRF_K; }
+    String getDenseSearchParams() { return "{\"nprobe\":16}"; }
 
     @PostConstruct
     void init() {

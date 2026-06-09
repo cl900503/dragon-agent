@@ -49,7 +49,11 @@ public class RerankService {
     @Value("${app.rerank.mmr-enabled:true}")
     private boolean mmrEnabled;
 
-    private final RestTemplate rest = new RestTemplate();
+    /** 包内可见：供管线调试输出读取实际配置 */
+    boolean isMmrEnabled() { return mmrEnabled; }
+    double getMmrLambda() { return mmrLambda; }
+    String getRerankModel() { return "BGE-Reranker-v2-m3 (TEI CPU)"; }
+
     private final ObjectMapper mapper = new ObjectMapper();
 
     /**
@@ -74,23 +78,38 @@ public class RerankService {
         }
 
         // 阶段 1：MMR 多样性去重 → 缩小候选集
-        List<Document> candidates = docs;
+        List<Document> candidates = mmr(query, docs);
+        // 阶段 2：Cross-Encoder 语义重排 → Top(rerankTopK)
+        return crossEncoder(query, candidates);
+    }
+
+    /** MMR 多样性去重——公开方法，供管线单独调用 */
+    public List<Document> mmr(String query, List<Document> docs) {
+        if (!mmrEnabled || docs.size() <= 1) return docs;
         List<RerankScore> preScores = new ArrayList<>();
         for (int i = 0; i < docs.size(); i++) {
             Object s = docs.get(i).getMetadata().get("score");
             preScores.add(new RerankScore(i, s instanceof Number ? ((Number) s).doubleValue() : 0));
         }
+        int mmrTop = Math.min(rerankTopK * 2, docs.size());
+        var mmrResult = maximalMarginalRelevance(query, docs, preScores, mmrLambda, mmrTop);
+        return mmrResult.documents();
+    }
 
-        int mmrTop = Math.min(ceTopK * 3, docs.size()); // MMR 保留 CE 输入量的 3 倍
-        if (mmrEnabled && docs.size() > 1) {
-            var mmrResult = maximalMarginalRelevance(query, docs, preScores, mmrLambda, mmrTop);
-            candidates = mmrResult.documents();
+    /** Cross-Encoder 精排——公开方法，供管线单独调用 */
+    public RerankResult crossEncoder(String query, List<Document> docs) {
+        if (docs.size() <= 3) {
+            List<RerankScore> scores = new ArrayList<>();
+            for (int i = 0; i < docs.size(); i++) {
+                Object s = docs.get(i).getMetadata().get("score");
+                scores.add(new RerankScore(i, s instanceof Number ? ((Number) s).doubleValue() : 0));
+            }
+            return new RerankResult(docs, scores);
         }
-
-        // 阶段 2：Cross-Encoder 语义重排 → Top(rerankTopK)
-        var ceResult = crossEncoderRerank(query, candidates, rerankTopK);
-        log.debug("RRF→MMR({})→CE({})", candidates.size(), rerankTopK);
-        return ceResult;
+        // 限制输入候选数，避免给 reranker 发送过多文档
+        int inputLimit = Math.min(ceTopK, docs.size());
+        List<Document> candidates = inputLimit < docs.size() ? docs.subList(0, inputLimit) : docs;
+        return crossEncoderRerank(query, candidates, rerankTopK);
     }
 
     /**
@@ -101,20 +120,35 @@ public class RerankService {
         List<RerankScore> scores = new ArrayList<>();
 
         try {
-            Map<String, Object> body = Map.of(
-                    "query", query,
-                    "texts", texts,
-                    "truncate", true);
+            String jsonBody = mapper.writeValueAsString(Map.of("query", query, "texts", texts, "truncate", true));
+            java.net.URL url = new java.net.URL(rerankUrl + "/rerank");
+            // DEBUG-REMOVED System.out.println("RERANK-CALL: " + rerankUrl + "/rerank with " + texts.size() + " texts, bodyLen=" + jsonBody.length());
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+            conn.setConnectTimeout(3000);
+            conn.setReadTimeout(10000);
+            conn.setRequestMethod("POST");
+            conn.setDoOutput(true);
+            conn.setRequestProperty("Content-Type", "application/json");
+            try (java.io.OutputStream os = conn.getOutputStream()) {
+                os.write(jsonBody.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            }
+            int code = conn.getResponseCode();
+            String respBody;
+            if (code >= 200 && code < 300) {
+                try (java.io.InputStream is = conn.getInputStream()) {
+                    respBody = new String(is.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+                }
+            } else {
+                try (java.io.InputStream es = conn.getErrorStream()) {
+                    String errBody = es != null ? new String(es.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8) : "";
+                    log.warn("Reranker returned HTTP {}: {}", code, errBody);
+                }
+                return fallbackRerank(docs);
+            }
 
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
-
-            ResponseEntity<String> resp = rest.postForEntity(
-                    rerankUrl + "/rerank", request, String.class);
-
-            if (resp.getStatusCode().is2xxSuccessful() && resp.getBody() != null) {
-                JsonNode root = mapper.readTree(resp.getBody());
+            // DEBUG-REMOVED System.out.println("RERANK-RESP-LEN: " + (respBody != null ? respBody.length() : 0));
+            if (respBody != null && !respBody.isEmpty()) {
+                JsonNode root = mapper.readTree(respBody);
                 for (JsonNode item : root) {
                     int idx = item.get("index").asInt();
                     double score = item.get("score").asDouble();
@@ -128,7 +162,8 @@ public class RerankService {
                 return new RerankResult(reranked, scores);
             }
         } catch (Exception e) {
-            log.warn("Reranker unavailable: {}, falling back to original order", e.getMessage());
+            // DEBUG-REMOVED System.out.println("RERANK-FAIL: " + e.getClass().getSimpleName() + " - " + e.getMessage());
+            log.warn("Reranker unavailable: {}", e.getMessage());
         }
 
         return fallbackRerank(docs);
@@ -156,9 +191,9 @@ public class RerankService {
                     scores.subList(0, Math.min(topK, scores.size())));
         }
 
-        // 预计算所有文档的 3-gram 集合
+        // 预计算所有文档的 3-gram 集合（截断到 256 字符，足够比较）
         List<Set<String>> docGrams = docs.stream()
-                .map(d -> trigramSet(d.getText()))
+                .map(d -> trigramSet(d.getText().length() > 256 ? d.getText().substring(0, 256) : d.getText()))
                 .collect(Collectors.toList());
 
         // 归一化相关性分数到 [0, 1]
@@ -224,19 +259,19 @@ public class RerankService {
     }
 
     /**
-     * 计算两个 3-gram 集合的 Jaccard 相似度。
+     * 计算两个 3-gram 集合的 Jaccard 相似度——无拷贝计数，避免 O(n) 内存分配。
      */
     static double jaccardSimilarity(Set<String> a, Set<String> b) {
         if (a.isEmpty() && b.isEmpty()) return 1.0;
         if (a.isEmpty() || b.isEmpty()) return 0.0;
 
-        Set<String> intersection = new HashSet<>(a);
-        intersection.retainAll(b);
-
-        Set<String> union = new HashSet<>(a);
-        union.addAll(b);
-
-        return (double) intersection.size() / union.size();
+        Set<String> smaller = a.size() <= b.size() ? a : b;
+        Set<String> larger = a.size() <= b.size() ? b : a;
+        int intersection = 0;
+        for (String s : smaller) {
+            if (larger.contains(s)) intersection++;
+        }
+        return (double) intersection / (a.size() + b.size() - intersection);
     }
 
     /**

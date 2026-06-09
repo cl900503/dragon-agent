@@ -109,60 +109,86 @@ public class RagPipelineService {
         }).collect(Collectors.toList());
 
         if (callback != null) {
-            d2.put("Dense召回", searchResult.denseResults().size() + " 条 (COSINE, nprobe=16)");
+            d2.put("Dense召回", searchResult.denseResults().size() + " 条 (COSINE, " + hybridSearch.getDenseSearchParams() + ")");
             d2.put("Sparse召回", searchResult.sparseResults().isEmpty() ? "未启用" : searchResult.sparseResults().size() + " 条");
             d2.put("BM25召回", searchResult.bm25Results().isEmpty() ? "未启用" : searchResult.bm25Results().size() + " 条");
-            d2.put("RRF融合(k=60)", searchResult.denseResults().size() + "+" + (searchResult.sparseResults().isEmpty() ? 0 : searchResult.sparseResults().size()) + "+" + (searchResult.bm25Results().isEmpty() ? 0 : searchResult.bm25Results().size()) + " → " + chain.size() + " 条");
+            int sparseCount = searchResult.sparseResults().isEmpty() ? 0 : searchResult.sparseResults().size();
+            int bm25Count = searchResult.bm25Results().isEmpty() ? 0 : searchResult.bm25Results().size();
+            d2.put("RRF融合(k=" + hybridSearch.getRrfK() + ")", searchResult.denseResults().size() + "+" + sparseCount + "+" + bm25Count + " → " + chain.size() + " 条");
             d2.put("filterExpr", filterExpr);
             callback.accept(new PipelineStep(2, "多路检索", "🔎", now() - t2, chain.isEmpty() ? "empty" : "success", "RRF(" + chain.size() + "条)", d2));
         }
         if (chain.isEmpty()) return RagSearchService.RagResult.EMPTY;
 
-        // ====== Step 3: 重排序 ======
+        // ====== Step 3: MMR 多样性去重 ======
         long t3 = now();
         Map<String, Object> d3 = new LinkedHashMap<>();
-        int ceInput = chain.size();
-        var rr3 = rerankService.rerank(searchQuery, chain);
-        chain = rr3.documents();
-        for (int i = 0; i < Math.min(chain.size(), rr3.scores().size()); i++)
-            chain.get(i).getMetadata().put("score", rr3.scores().get(i).score());
+        int mmrInput = chain.size();
+        chain = rerankService.mmr(searchQuery, chain);
+        int mmrOutput = chain.size();
 
         if (callback != null) {
-            boolean ceSkipped = ceInput <= 3;
-            d3.put("候选数", ceInput + " 条");
-            d3.put("MMR", "✅ 先执行 (λ=0.7, Jaccard 3-gram) → 去重后 " + chain.size() + " 条");
-            d3.put("Cross-Encoder", ceInput <= 3 ? "⏭ 已跳过（候选≤3）" : "BGE-Reranker-v2-m3 → " + chain.size() + " 条");
-            d3.put("最终输出", chain.size() + " 条");
-            String s3 = ceInput <= 3 ? "跳过(" + ceInput + "≤3)" : "MMR(" + ceInput + "→) → CE → " + chain.size() + "条";
-            callback.accept(new PipelineStep(3, "重排序", "📊", now() - t3, chain.isEmpty() ? "empty" : "success", s3, d3));
+            d3.put("输入", mmrInput + " 条");
+            d3.put("算法", "Jaccard 3-gram 相似度, λ=" + rerankService.getMmrLambda());
+            d3.put("输出", mmrOutput + " 条");
+            d3.put("mmrEnabled", rerankService.isMmrEnabled());
+            String s3;
+            if (!rerankService.isMmrEnabled()) {
+                s3 = "MMR 未启用，跳过(" + mmrInput + "条)";
+            } else if (mmrInput <= 1) {
+                s3 = "无需去重(" + mmrInput + "≤1)";
+            } else if (mmrOutput < mmrInput) {
+                s3 = "去重 " + mmrInput + "→" + mmrOutput;
+            } else {
+                s3 = "未发现重复(" + mmrInput + "条均唯一)";
+            }
+            callback.accept(new PipelineStep(3, "MMR 去重", "🎯", now() - t3, chain.isEmpty() ? "empty" : "success", s3, d3));
         }
 
-        // ====== Step 4: 阈值过滤 ======
+        // ====== Step 4: Cross-Encoder 精排 ======
         long t4 = now();
         Map<String, Object> d4 = new LinkedHashMap<>();
-        d4.put("threshold", 0.2); d4.put("beforeFilter", chain.size());
+        int ceInput = chain.size();
+        boolean ceSkipped = ceInput <= 3;
+        var rr4 = rerankService.crossEncoder(searchQuery, chain);
+        chain = rr4.documents();
+        for (int i = 0; i < Math.min(chain.size(), rr4.scores().size()); i++)
+            chain.get(i).getMetadata().put("score", rr4.scores().get(i).score());
+
+        if (callback != null) {
+            d4.put("输入", ceInput + " 条");
+            d4.put("模型", ceSkipped ? "⏭ 已跳过（候选≤3）" : rerankService.getRerankModel());
+            d4.put("输出", chain.size() + " 条");
+            String s4 = ceSkipped ? "跳过(" + ceInput + "≤3)" : "精排 " + ceInput + "→" + chain.size();
+            callback.accept(new PipelineStep(4, "Cross-Encoder 精排", "📊", now() - t4, chain.isEmpty() ? "empty" : "success", s4, d4));
+        }
+
+        // ====== Step 5: 阈值过滤 ======
+        long t5 = now();
+        Map<String, Object> d5 = new LinkedHashMap<>();
+        d5.put("threshold", 0.2); d5.put("beforeFilter", chain.size());
         var filtered = chain.stream().filter(d -> { Object s = d.getMetadata().get("score");
             return s instanceof Number && ((Number) s).doubleValue() >= 0.2; }).collect(Collectors.toList());
-        if (filtered.isEmpty() && !chain.isEmpty()) { filtered = List.of(chain.get(0)); d4.put("fallback", "全部低于阈值"); }
-        d4.put("afterFilter", filtered.size()); d4.put("removedCount", chain.size() - filtered.size());
+        if (filtered.isEmpty() && !chain.isEmpty()) { filtered = List.of(chain.get(0)); d5.put("fallback", "全部低于阈值"); }
+        d5.put("afterFilter", filtered.size()); d5.put("removedCount", chain.size() - filtered.size());
         chain = filtered;
 
         if (callback != null) {
-            int before = (int) d4.get("beforeFilter");
-            callback.accept(new PipelineStep(4, "阈值过滤", "✂️", now() - t4, chain.size() < before ? "filtered" : "success", "阈值 0.2 → " + before + "→" + chain.size() + " 条", d4));
+            int before = (int) d5.get("beforeFilter");
+            callback.accept(new PipelineStep(5, "阈值过滤", "✂️", now() - t5, chain.size() < before ? "filtered" : "success", "阈值 0.2 → " + before + "→" + chain.size() + " 条", d5));
         }
 
-        // ====== Step 5: 上下文构建 ======
-        long t5 = now();
+        // ====== Step 6: 上下文构建 ======
+        long t6 = now();
         String ctxt = ragSearchService.formatContext(chain);
         List<Map<String, Object>> traces = ragSearchService.buildTraces(chain);
 
         if (callback != null) {
-            Map<String, Object> d5 = new LinkedHashMap<>();
-            d5.put("lostInMiddle", true); d5.put("contentDedupApplied", true);
-            d5.put("uniqueDocuments", traces.stream().map(tr -> (String) tr.get("documentName")).distinct().count());
-            d5.put("contextLength", ctxt.length());
-            callback.accept(new PipelineStep(5, "上下文构建", "📝", now() - t5, "success", traces.size() + " 段，" + ctxt.length() + " 字符", d5));
+            Map<String, Object> d6 = new LinkedHashMap<>();
+            d6.put("lostInMiddle", true); d6.put("contentDedupApplied", true);
+            d6.put("uniqueDocuments", traces.stream().map(tr -> (String) tr.get("documentName")).distinct().count());
+            d6.put("contextLength", ctxt.length());
+            callback.accept(new PipelineStep(6, "上下文构建", "📝", now() - t6, "success", traces.size() + " 段，" + ctxt.length() + " 字符", d6));
         }
 
         return new RagSearchService.RagResult(ctxt, traces);

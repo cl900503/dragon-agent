@@ -155,10 +155,16 @@ public class QueryProcessor {
      * </ul>
      */
     List<String> rewrite(String query) {
+        long rewriteStart = System.currentTimeMillis();
+
         // 改写缓存——相同查询不重复调 LLM
         if (cacheService != null) {
             var cached = cacheService.getRewriteResult(query);
-            if (cached != null) return cached;
+            if (cached != null) {
+                log.debug("Query rewritten (cache hit): \"{}\" → {} variants in {}ms",
+                        truncate(query, 30), cached.size(), System.currentTimeMillis() - rewriteStart);
+                return cached;
+            }
         }
 
         // RewriteClient 内置了 RestTemplate 超时（connect=3s, read=5s）
@@ -172,12 +178,12 @@ public class QueryProcessor {
                         if (!trimmed.isBlank() && variants.size() < 3) variants.add(trimmed);
                     }
                     log.debug("Query rewritten (V3): \"{}\" → {} variants in {}ms",
-                            truncate(query, 30), variants.size(), 0);
+                            truncate(query, 30), variants.size(), System.currentTimeMillis() - rewriteStart);
                     if (cacheService != null) cacheService.putRewriteResult(query, variants);
                     return variants.isEmpty() ? List.of(query) : variants;
                 }
             } catch (Exception e) {
-                log.warn("RewriteClient failed: {}", e.getMessage());
+                log.warn("RewriteClient failed ({}ms): {}", System.currentTimeMillis() - rewriteStart, e.getMessage());
             }
             return List.of(query);
         }

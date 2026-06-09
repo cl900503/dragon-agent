@@ -45,6 +45,7 @@ const KEY_LABELS: Record<string, string> = {
   afterCrossEncoder: '重排后数量',
   mmrEnabled: 'MMR去重',
   mmrLambda: 'MMR多样性参数',
+  mmrEnabled: 'MMR去重',
   topRerankScore: '重排最高分',
   threshold: '相似度阈值',
   beforeFilter: '过滤前数量',
@@ -214,7 +215,7 @@ export default function RagTest() {
               </div>
             ))}
             {/* 加载指示器 */}
-            {loading && steps.length < 5 && (
+            {loading && steps.length < 6 && (
               <div className="rt-step-wrap">
                 {steps.length > 0 && <div className="rt-connector" />}
                 <div className="rt-step-card rt-step-running">

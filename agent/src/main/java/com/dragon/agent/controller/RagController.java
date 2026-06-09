@@ -104,6 +104,9 @@ public class RagController {
     // === 轮询式逐步调试（每步完成即时更新，前端轮询渲染） ===
     private final Map<String, Map<String, Object>> debugSessions = new java.util.concurrent.ConcurrentHashMap<>();
 
+    /** 调试 session 过期时间（毫秒），超时自动清理，防止前端断开后内存泄漏 */
+    private static final long DEBUG_SESSION_TTL_MS = 5 * 60 * 1000; // 5 分钟
+
     @PostMapping("/debug/start")
     public Mono<ResponseEntity<Map<String, Object>>> debugStart(@RequestBody Map<String, String> body) {
         String query = body.getOrDefault("query", "");
@@ -114,6 +117,7 @@ public class RagController {
             String sid = java.util.UUID.randomUUID().toString();
             Map<String, Object> state = new LinkedHashMap<>();
             state.put("steps", new ArrayList<Map<String, Object>>()); state.put("done", false);
+            state.put("_createdAt", System.currentTimeMillis());
             debugSessions.put(sid, state);
             Schedulers.boundedElastic().schedule(() -> {
                 @SuppressWarnings("unchecked") var slist = (List<Map<String, Object>>) state.get("steps");
@@ -130,7 +134,16 @@ public class RagController {
     public Mono<ResponseEntity<Map<String, Object>>> debugPoll(@RequestParam("sid") String sid) {
         Map<String, Object> state = debugSessions.get(sid);
         if (state == null) return Mono.just(ResponseEntity.notFound().build());
-        if (Boolean.TRUE.equals(state.get("done"))) debugSessions.remove(sid);
+        // 已完成则立即清理
+        if (Boolean.TRUE.equals(state.get("done"))) { debugSessions.remove(sid); }
+        // 超时清理（前端断开后不再轮询，防止内存泄漏）
+        else {
+            Object created = state.get("_createdAt");
+            if (created instanceof Long && System.currentTimeMillis() - (Long) created > DEBUG_SESSION_TTL_MS) {
+                debugSessions.remove(sid);
+                return Mono.just(ResponseEntity.status(410).body(Map.of("error", "session expired")));
+            }
+        }
         return Mono.just(ResponseEntity.ok(state));
     }
 }
