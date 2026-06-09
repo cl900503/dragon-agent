@@ -19,3 +19,7 @@ Thumbs.db
 # === Environment ===
 .env
 .env.*
+
+# === Logs ===
+*.log
+console.log
